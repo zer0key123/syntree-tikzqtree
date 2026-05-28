@@ -116,10 +116,9 @@ img { border: 1px solid #bbbbbb; }
 <script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
 <link type="text/css" href="css/cupertino/jquery-ui-1.8.18.custom.css" rel="stylesheet">
 <script type="text/javascript" src="js/jquery-ui-1.8.18.custom.min.js"></script>
-<script src="src/qtree.js" type="module"></script>
+<script src="dist/dist/qtree.js"></script>
 <script type="module">
-import QTree from './src/qtree.js';
-window.QTree = QTree;
+const QTree = window.QTree;
 const urlParams = new URLSearchParams(window.location.search);
 const tree = urlParams.get('i');
 if (tree !== null) {

@@ -8,8 +8,19 @@
    * qtree-js - Render TikZ-qtree trees in the browser using TikZJax
    */
 
+  // Capture the script's own URL at eval time (document.currentScript is only
+  // available synchronously during script execution, not inside callbacks).
+  // This lets us resolve sibling paths correctly under any sub-directory deployment
+  // (e.g. GitHub Pages at /syntree-tikzqtree/) instead of anchoring to site root.
+  const _scriptSrc = (typeof document !== 'undefined' && document.currentScript)
+    ? document.currentScript.src : null;
+  function _resolveUrl(relative) {
+    return _scriptSrc ? new URL(relative, _scriptSrc).href : relative;
+  }
+
   // Use local tikzjax build with tikz-qtree support
-  const TIKZJAX_DEFAULT = '/dist/tikzjax/tikzjax.js';
+  // dist/dist/qtree.js  →  ../tikzjax/  →  dist/tikzjax/
+  const TIKZJAX_DEFAULT = _resolveUrl('../tikzjax/tikzjax.js');
 
   /**
    * Default TikZ preamble for qtree trees
@@ -50,7 +61,7 @@
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.type = 'text/css';
-      link.href = '/dist/tikzjax/fonts.css';
+      link.href = _resolveUrl('../tikzjax/fonts.css');
       document.head.appendChild(link);
 
       // Load the TikZJax script
