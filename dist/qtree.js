@@ -25,6 +25,7 @@
    */
   let config = {
     tikzjaxUrl: TIKZJAX_DEFAULT,
+    fontsUrl: '/dist/tikzjax/fonts.css',
     preamble: DEFAULT_PREAMBLE,
     autoInit: true
   };
@@ -53,7 +54,7 @@
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.type = 'text/css';
-      link.href = '/dist/tikzjax/fonts.css';
+      link.href = config.fontsUrl;
       document.head.appendChild(link);
 
       // Load the TikZJax script
