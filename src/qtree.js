@@ -19,6 +19,7 @@ const DEFAULT_PREAMBLE = `\\usepackage[T3,T2A,T1]{fontenc}\\usepackage[utf8]{inp
  */
 let config = {
   tikzjaxUrl: TIKZJAX_DEFAULT,
+  fontsUrl: '/dist/tikzjax/fonts.css',
   preamble: DEFAULT_PREAMBLE,
   autoInit: true
 };
@@ -47,7 +48,7 @@ function loadTikZJax() {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.type = 'text/css';
-    link.href = '/dist/tikzjax/fonts.css';
+    link.href = config.fontsUrl;
     document.head.appendChild(link);
 
     // Load the TikZJax script
@@ -314,6 +315,74 @@ async function init() {
   }
 }
 
+/**
+ * Create qtree bracket notation from nested arrays.
+ * @param {Array|string} node - [label, ...children] or a leaf string
+ * @returns {string} qtree bracket notation
+ */
+function fromArray(node) {
+  if (typeof node === 'string') {
+    return node;
+  }
+  if (!Array.isArray(node) || node.length === 0) {
+    throw new Error('Invalid tree structure');
+  }
+  const [label, ...children] = node;
+  if (children.length === 0) {
+    return label;
+  }
+  const childrenStr = children.map(fromArray).join(' ');
+  return `[.${label} ${childrenStr} ]`;
+}
+
+/**
+ * Parse qtree bracket notation into nested arrays.
+ * @param {string} qtree - Tree in bracket notation
+ * @returns {Array} Nested array representation
+ */
+function toArray(qtree) {
+  return parseTokens(tokenize(qtree));
+}
+
+/** @private */
+function tokenize(str) {
+  const tokens = [];
+  let current = '';
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    if (char === '[' || char === ']') {
+      if (current.trim()) { tokens.push(current.trim()); current = ''; }
+      tokens.push(char);
+    } else if (/\s/.test(char)) {
+      if (current.trim()) { tokens.push(current.trim()); current = ''; }
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) tokens.push(current.trim());
+  return tokens;
+}
+
+/** @private */
+function parseTokens(tokens) {
+  let pos = 0;
+  function parse() {
+    if (tokens[pos] === '[') {
+      pos++;
+      let label = tokens[pos];
+      if (label.startsWith('.')) label = label.substring(1);
+      pos++;
+      const children = [];
+      while (pos < tokens.length && tokens[pos] !== ']') children.push(parse());
+      pos++; // skip ']'
+      return [label, ...children];
+    } else {
+      return tokens[pos++];
+    }
+  }
+  return parse();
+}
+
 // Export API
 const QTree = {
   render,
@@ -323,6 +392,8 @@ const QTree = {
   init,
   loadTikZJax,
   generateTikZCode,
+  fromArray,
+  toArray,
   defaultPreamble: DEFAULT_PREAMBLE,
   version: '1.0.0'
 };
@@ -349,5 +420,7 @@ export {
   configure,
   init,
   loadTikZJax,
-  generateTikZCode
+  generateTikZCode,
+  fromArray,
+  toArray
 };

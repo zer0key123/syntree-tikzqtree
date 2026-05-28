@@ -18,7 +18,7 @@
   // These are loaded at runtime (not baked into core.dump) so the async file loader
   // can handle the .fd/.def file cascade properly.
   // amsmath is bundled in tikzjax.js (amstext.sty defines \text).
-  const DEFAULT_PREAMBLE = `\\usepackage[T3,T2A]{fontenc}\\usepackage[utf8]{inputenc}\\usepackage{cm-unicode}\\usepackage{amsmath}\\usepackage[noenc]{tipa}`;
+  const DEFAULT_PREAMBLE = `\\usepackage[T3,T2A,T1]{fontenc}\\usepackage[utf8]{inputenc}\\usepackage{cm-unicode}\\usepackage{amsmath}\\usepackage[noenc]{tipa}\\usetikzlibrary{positioning}`;
 
   /**
    * Configuration options
@@ -109,8 +109,10 @@
       }
     } else {
       // qtree bracket notation: single tree, prepend \Tree
+      // Auto-fix missing spaces before ] (e.g. "cat]" → "cat ]")
+      const fixedTree = tree.replace(/([^\s])\]/g, '$1 ]');
       const treeOptionsStr = treeOptions ? `[${treeOptions}]` : '';
-      code += `\\Tree ${treeOptionsStr}${tree}\n`;
+      code += `\\Tree ${treeOptionsStr}${fixedTree}\n`;
       if (afterTree) {
         code += `${afterTree}\n`;
       }
@@ -213,6 +215,12 @@
           for (const node of mutation.addedNodes) {
             if (node.tagName === 'svg' || node.tagName === 'SVG') {
               observer.disconnect();
+              const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+              titleEl.textContent = tree;
+              node.insertBefore(titleEl, node.firstChild);
+              node.setAttribute('role', 'img');
+              node.setAttribute('aria-label', tree);
+              containerEl.dataset.qtreeSource = tree;
               resolve(node);
               return;
             }
@@ -436,6 +444,7 @@
     generateTikZCode,
     fromArray,
     toArray,
+    defaultPreamble: DEFAULT_PREAMBLE,
     version: '1.0.0'
   };
 
