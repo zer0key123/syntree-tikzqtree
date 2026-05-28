@@ -8,17 +8,25 @@
    * qtree-js - Render TikZ-qtree trees in the browser using TikZJax
    */
 
+  // Capture the script's own URL at eval time (document.currentScript is only
+  // available synchronously during script execution, not inside callbacks).
+  // This lets us resolve sibling paths correctly under any sub-directory deployment
+  // (e.g. GitHub Pages at /syntree-tikzqtree/) instead of anchoring to site root.
+  const _scriptSrc = (typeof document !== 'undefined' && document.currentScript)
+    ? document.currentScript.src : null;
+  function _resolveUrl(relative) {
+    return _scriptSrc ? new URL(relative, _scriptSrc).href : relative;
+  }
+
   // Use local tikzjax build with tikz-qtree support
-  const TIKZJAX_DEFAULT = '/dist/tikzjax/tikzjax.js';
+  // dist/dist/qtree.js  →  ../tikzjax/  →  dist/tikzjax/
+  const TIKZJAX_DEFAULT = _resolveUrl('./tikzjax/tikzjax.js');
 
   /**
    * Default TikZ preamble for qtree trees
    */
-  // Load T2A encoding for Cyrillic support, utf8 input encoding, and cm-unicode fonts.
-  // These are loaded at runtime (not baked into core.dump) so the async file loader
-  // can handle the .fd/.def file cascade properly.
-  // amsmath is bundled in tikzjax.js (amstext.sty defines \text).
-  const DEFAULT_PREAMBLE = `\\usepackage[T3,T2A]{fontenc}\\usepackage[utf8]{inputenc}\\usepackage{cm-unicode}\\usepackage{amsmath}\\usepackage[noenc]{tipa}`;
+  // tikz-qtree is preloaded in the TikZJax core.dump, no preamble needed
+  const DEFAULT_PREAMBLE = `\\usepackage{cm-unicode}`;
 
   /**
    * Configuration options
@@ -53,7 +61,7 @@
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.type = 'text/css';
-      link.href = '/dist/tikzjax/fonts.css';
+      link.href = _resolveUrl('./tikzjax/fonts.css');
       document.head.appendChild(link);
 
       // Load the TikZJax script
@@ -78,74 +86,35 @@
   }
 
   /**
-   * Generate TikZ code for a qtree or raw TikZ input
-   * @param {string} tree - qtree bracket notation, raw TikZ body, or complete tikzpicture
+   * Generate TikZ code for a qtree
+   * @param {string} tree - The tree in qtree bracket notation
    * @param {object} options - Rendering options
-   * @param {boolean} [options.raw] - If true, treat tree as raw TikZ body (no \Tree prefix)
    * @returns {string} Complete TikZ code
    */
   function generateTikZCode(tree, options = {}) {
     const {
+      preamble = config.preamble,
       tikzOptions = '',
       treeOptions = '',
-      afterTree = '',
-      raw = false
+      afterTree = ''
     } = options;
 
-    // Complete tikzpicture passed directly — return verbatim
-    if (tree.trim().startsWith('\\begin{tikzpicture}')) {
-      return tree;
-    }
+    // Build the TikZ picture
+    let code = '';
 
+    // Add any custom preamble commands (TikZJax handles this via data-tikz-preamble)
     const tikzOptionsStr = tikzOptions ? `[${tikzOptions}]` : '';
-    let code = `\\begin{tikzpicture}${tikzOptionsStr}\n`;
+    const treeOptionsStr = treeOptions ? `[${treeOptions}]` : '';
 
-    if (raw) {
-      // Raw TikZ body: multiple \Tree commands, \begin{scope}, \draw, etc.
-      code += `${tree}\n`;
-      if (afterTree) {
-        code += `${afterTree}\n`;
-      }
-    } else {
-      // qtree bracket notation: single tree, prepend \Tree
-      const treeOptionsStr = treeOptions ? `[${treeOptions}]` : '';
-      code += `\\Tree ${treeOptionsStr}${tree}\n`;
-      if (afterTree) {
-        code += `${afterTree}\n`;
-      }
+    code += `\\begin{tikzpicture}${tikzOptionsStr}\n`;
+    code += `\\Tree ${treeOptionsStr}${tree}\n`;
+    // Add any code after the tree (e.g., movement arrows)
+    if (afterTree) {
+      code += `${afterTree}\n`;
     }
-
     code += `\\end{tikzpicture}`;
-    return code;
-  }
 
-  /**
-   * Convert CJK/East-Asian characters in a TeX string to plain TeX font commands.
-   *
-   * Each character U+XXYY (page=XX, position=YY) becomes:
-   *   {\font\qtreecjk=gbsnuXX\qtreecjk\charYY}
-   *
-   * This bypasses the CJK LaTeX package entirely. TFM data for gbsnuXX fonts is
-   * served synchronously by dvi2html's tfmData() call in library.ts, so no async
-   * file loading is needed. The remapCJKChars() post-processor in run-tex.ts then
-   * converts the raw char codes back to Unicode code points in the final SVG.
-   *
-   * Characters not in the CJK Unicode block (U+3000-U+9FFF) are passed through unchanged.
-   */
-  function cjkToTex(str) {
-    let result = '';
-    for (const char of str) {
-      const cp = char.codePointAt(0);
-      if (cp >= 0x3000 && cp <= 0x9FFF) {
-        const page = (cp >> 8) & 0xFF;
-        const pos = cp & 0xFF;
-        const pageHex = page.toString(16).padStart(2, '0');
-        result += `{\\font\\qtreecjk=gbsnu${pageHex}\\qtreecjk\\char${pos}}`;
-      } else {
-        result += char;
-      }
-    }
-    return result;
+    return code;
   }
 
   /**
@@ -188,17 +157,8 @@
     // Generate TikZ code
     const tikzCode = generateTikZCode(tree, options);
 
-    // Convert any CJK/East-Asian characters to plain TeX font commands so the
-    // TeX engine can render them without the CJK LaTeX package (which has missing
-    // dependencies in the bundled TikZJax). TFM data for CJK subfonts (gbsnuXX)
-    // is available synchronously via dvi2html's tfmData(). The remapCJKChars()
-    // post-processor in run-tex.ts reconstructs Unicode from the raw char codes.
-    const finalCode = cjkToTex(tikzCode);
-
-    const preamble = options.preamble !== undefined ? options.preamble : config.preamble;
-
     // Create the script element
-    const script = createTikZScript(finalCode, preamble);
+    const script = createTikZScript(tikzCode, options.preamble);
 
     // Clear container and append script
     containerEl.innerHTML = '';
@@ -257,31 +217,24 @@
   }
 
   /**
-   * Process all elements with data-qtree or data-tikz attributes
-   * - data-qtree: qtree bracket notation, wrapped as \begin{tikzpicture}\Tree ...\end{tikzpicture}
-   * - data-tikz: raw TikZ body or complete \begin{tikzpicture}...\end{tikzpicture} block
+   * Process all elements with data-qtree attribute
    * @returns {Promise<void>}
    */
   async function processAll() {
-    const elements = document.querySelectorAll('[data-qtree], [data-tikz]');
+    const elements = document.querySelectorAll('[data-qtree]');
 
     for (const el of elements) {
-      const isRaw = el.hasAttribute('data-tikz');
-      const content = isRaw
-        ? (el.getAttribute('data-tikz') || el.textContent)
-        : (el.getAttribute('data-qtree') || el.textContent);
-
+      const tree = el.getAttribute('data-qtree') || el.textContent;
       const options = {
         tikzOptions: el.getAttribute('data-tikz-options') || '',
         treeOptions: el.getAttribute('data-tree-options') || '',
-        preamble: el.getAttribute('data-preamble') || config.preamble,
-        raw: isRaw
+        preamble: el.getAttribute('data-preamble') || config.preamble
       };
 
       try {
-        await render(el, content, options);
+        await render(el, tree, options);
       } catch (error) {
-        console.error('Failed to render:', error);
+        console.error('Failed to render qtree:', error);
         el.innerHTML = `<span class="qtree-error">Error: ${error.message}</span>`;
       }
     }
