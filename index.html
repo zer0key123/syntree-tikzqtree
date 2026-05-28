@@ -185,7 +185,12 @@ window.renderCustomTree = async function() {
     container.innerHTML = `<span class="error">Error: ${error.message}</span>`;
   }
 };
-renderCustomTree()
+// Only auto-render on load if there is actual input (e.g. from ?i= URL param).
+// An empty initial render starts a 30-second timeout that later overwrites
+// the container with a "timed out" error, killing any real render in progress.
+if (document.getElementById('tree-input').value.trim()) {
+  renderCustomTree();
+}
 
 // ── font embedding helper ─────────────────────────────────────────────────
 async function buildEmbeddedFontCSS(usedFonts) {

@@ -230,10 +230,8 @@ async function render(container, tree, options = {}) {
       reject(new Error('TikZJax rendering timed out'));
     }, 30000);
 
-    // Trigger TikZJax processing if it has a manual trigger
-    if (window.tikzjax && typeof window.tikzjax.process === 'function') {
-      window.tikzjax.process();
-    }
+    // TikzJax watches document.body via its own MutationObserver and
+    // automatically picks up the newly-appended <script type="text/tikz">.
   });
 }
 
