@@ -180,7 +180,7 @@ renderCustomTree()
 async function buildEmbeddedFontCSS(usedFonts) {
   if (usedFonts.size === 0) return '';
   let fontsCSS;
-  try { fontsCSS = await fetch('/dist/tikzjax/fonts.css').then(r => r.text()); }
+  try { fontsCSS = await fetch('dist/tikzjax/fonts.css').then(r => r.text()); }
   catch (e) { return ''; }
 
   const fontCache = {};
@@ -203,7 +203,7 @@ async function buildEmbeddedFontCSS(usedFonts) {
           const mime = src.endsWith('.otf') ? 'font/otf' : 'font/ttf';
           fontCache[src] = `data:${mime};base64,${btoa(binary)}`;
         } else {
-          fontCache[src] = new URL('/dist/tikzjax/' + src, window.location.href).href;
+          fontCache[src] = new URL('dist/tikzjax/' + src, window.location.href).href;
         }
       } catch (e) { fontCache[src] = null; }
     }
