@@ -3,7 +3,7 @@
  */
 
 // Use local tikzjax build with tikz-qtree support
-const TIKZJAX_DEFAULT = '/dist/tikzjax/tikzjax.js';
+const TIKZJAX_DEFAULT = '/syntree-tikzqtree/dist/tikzjax/tikzjax.js';
 
 /**
  * Default TikZ preamble for qtree trees
@@ -19,7 +19,7 @@ const DEFAULT_PREAMBLE = `\\usepackage[T3,T2A,T1]{fontenc}\\usepackage[utf8]{inp
  */
 let config = {
   tikzjaxUrl: TIKZJAX_DEFAULT,
-  fontsUrl: '/dist/tikzjax/fonts.css',
+  fontsUrl: '/syntree-tikzqtree/dist/tikzjax/fonts.css',
   preamble: DEFAULT_PREAMBLE,
   autoInit: true
 };
