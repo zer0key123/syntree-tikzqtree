@@ -3,9 +3,7 @@
  */
 
 // Use local tikzjax build with tikz-qtree support
-// Use import.meta.url so paths stay correct under any sub-directory deployment
-// (e.g. GitHub Pages at /syntree-tikzqtree/).
-const TIKZJAX_DEFAULT = new URL('../dist/tikzjax/tikzjax.js', import.meta.url).href;
+const TIKZJAX_DEFAULT = '/dist/tikzjax/tikzjax.js';
 
 /**
  * Default TikZ preamble for qtree trees
@@ -49,7 +47,7 @@ function loadTikZJax() {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.type = 'text/css';
-    link.href = new URL('../dist/tikzjax/fonts.css', import.meta.url).href;
+    link.href = '/dist/tikzjax/fonts.css';
     document.head.appendChild(link);
 
     // Load the TikZJax script
