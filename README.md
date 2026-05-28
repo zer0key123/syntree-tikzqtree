@@ -1,23 +1,3 @@
-2011:
-The goal of this project is to create a browser-based, fully local syntax tree generator, for drawing trees as you might find in an introductory linguistics course. Here are a few main features:
+The goal of this project is to create a browser-based, fully local syntax tree generator that has all the functionality of the qtree latex extension. 
 
-* Designed to be easy to use.
-* Draws as you type for real-time feedback.
-* Basic support for movement arrows using markup.
-* Supports Unicode insofar as the browser it is running on does.
-* Adjustable appearance.
-* Linkable, i.e. parses the query string.
-
-For more details, see the [wiki](https://github.com/mshang/syntree/wiki).
-
-The app can be found at <http://mshang.ca/syntree/>. If you publish a paper with a tree drawn by this app, I would appreciate it if you sent me a link to your paper (mail@mshang.ca).
-
-By the way, here are a few great alternatives:
-
-* [phpSyntaxTree](http://ironcreek.net/phpsyntaxtree/)
-* [RSyntaxTree](http://www.yohasebe.com/rsyntaxtree/)
-
-
-2023:
-The end product is now an svg-file which can be downloaded by pressing a button.
-Downloading all files from github.com has also been made slightly easier.
+The app can be found at <http://zer0key123.github.io/syntree-tikzqtree/>.
