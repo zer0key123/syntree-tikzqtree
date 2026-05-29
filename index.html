@@ -152,6 +152,48 @@ if (optionCommands !== null) {
 	document.getElementById('tikz-options-input').value = optionCommands;
 }
 
+// ── TikZJax diagnostics ────────────────────────────────────────────────────
+// Intercept console.log to capture messages from TikZJax internals
+// (Worker load failures, texify errors, etc. are only logged, never thrown).
+window._tjLogs = [];
+const _origLog = console.log.bind(console);
+console.log = function(...args) {
+  _origLog(...args);
+  const msg = args.map(a => a instanceof Error ? a.message : (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+  window._tjLogs.push(msg);
+  if (window._tjLogs.length > 20) window._tjLogs.shift();
+};
+
+// Catch unhandled Promise rejections (e.g. tikzjax's D.dispatchEvent(null) crash).
+window.addEventListener('unhandledrejection', function(evt) {
+  const container = document.getElementById('custom-tree');
+  if (!container) return;
+  const isRendering = container.innerHTML.includes('Rendering') ||
+                      container.innerHTML.includes('TeX engine');
+  if (isRendering) {
+    const msg = evt.reason instanceof Error ? evt.reason.message : String(evt.reason);
+    container.innerHTML = `<div class="error">Internal TikZJax error: ${msg}<br><small style="opacity:.7">Logs: ${window._tjLogs.slice(-5).join(' | ')}</small></div>`;
+    evt.preventDefault();
+  }
+});
+
+// Catch synchronous JS errors from tikzjax internals.
+window.addEventListener('error', function(evt) {
+  const container = document.getElementById('custom-tree');
+  if (!container) return;
+  const isRendering = container.innerHTML.includes('Rendering') ||
+                      container.innerHTML.includes('TeX engine');
+  // Only intercept errors from tikzjax.js
+  if (isRendering && evt.filename && evt.filename.includes('tikzjax')) {
+    container.innerHTML = `<div class="error">TikZJax JS error: ${evt.message}<br><small style="opacity:.7">${(evt.filename||'').replace(/.*\//,'')}: ${evt.lineno}</small></div>`;
+  }
+});
+
+// Capture tikzjax-load-finished at document level (capture phase) to debug bubbling.
+document.addEventListener('tikzjax-load-finished', function(e) {
+  _origLog('[debug] tikzjax-load-finished at document; target:', e.target && e.target.tagName, 'bubbles:', e.bubbles);
+}, true);
+
 window.renderCustomTree = async function() {
   const treeInput = document.getElementById('tree-input').value;
   const tikzOptionsInput = document.getElementById('tikz-options-input').value;
@@ -162,8 +204,28 @@ window.renderCustomTree = async function() {
   const pngTransBtn = document.getElementById('png-transparent-btn');
   const pngWhiteBtn = document.getElementById('png-white-btn');
 
-  container.innerHTML = '<span class="hint">Rendering… (first render may take 10–30 s while the TeX engine loads)</span>';
+  container.innerHTML = '<span class="hint">Rendering… (first render may take up to 60 s on first use)</span>';
   svgBtn.disabled = pngTransBtn.disabled = pngWhiteBtn.disabled = true;
+
+  // Watch for spinner appearance — confirms TikZJax picked up the script.
+  let spinnerSeen = false;
+  const spinnerWatcher = new MutationObserver(mutations => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType !== 1) continue;
+        const tag = (node.tagName || '').toLowerCase();
+        if (tag === 'svg' || tag === 'img') {
+          if (!spinnerSeen) {
+            spinnerSeen = true;
+            const hint = container.querySelector('.hint');
+            if (hint) hint.textContent = 'TeX engine compiling… this can take 30–60 s on first use';
+          }
+          _origLog('[debug] node added to container:', tag, node.getAttribute && node.getAttribute('class'));
+        }
+      }
+    }
+  });
+  spinnerWatcher.observe(container, { childList: true });
 
   try {
     const trimmed = treeInput.trim();
@@ -171,7 +233,6 @@ window.renderCustomTree = async function() {
       (trimmed.startsWith('\\Tree') || trimmed.startsWith('\\begin{') ||
        trimmed.startsWith('\\draw') || trimmed.startsWith('\\node'));
 
-    const defaultPreamble = QTree.generateTikZCode ? undefined : undefined; // use config default
     const extraPreamble = preambleInput.trim();
 
     await QTree.render(container, treeInput, {
@@ -179,19 +240,22 @@ window.renderCustomTree = async function() {
       afterTree: drawInput,
       raw: isRaw,
       preamble: extraPreamble
-        ? (QTree._defaultPreamble || '') + extraPreamble
-        : undefined   // undefined → use config.preamble
+        ? (QTree.defaultPreamble || '') + extraPreamble
+        : undefined   // undefined → use config.preamble (DEFAULT_PREAMBLE)
     });
 
     svgBtn.disabled = pngTransBtn.disabled = pngWhiteBtn.disabled = false;
   } catch (error) {
     const debugInfo = [
-      'TikzJax: ' + (window.TikzJax ? 'loaded ✓' : 'NOT loaded ✗'),
-      'URL: ' + (() => { try { return new URL('dist/tikzjax/tikzjax.js', new URL('./', window.location.href).href).href; } catch(e) { return '?'; } })(),
+      'TikzJax: ' + (window.TikzJax ? '✓' : '✗'),
+      'Spinner: ' + (spinnerSeen ? '✓ appeared' : '✗ never appeared — TikZJax did not process script'),
       'readyState: ' + document.readyState,
-      'IDB: ' + (() => { try { return typeof indexedDB !== 'undefined' ? 'ok' : 'unavailable'; } catch(e) { return 'blocked (' + e.message + ')'; } })()
+      'IDB: ' + (() => { try { return typeof indexedDB !== 'undefined' ? 'ok' : 'N/A'; } catch(e) { return 'blocked'; } })(),
+      'Logs: ' + (window._tjLogs.slice(-3).join(' | ') || '(none)')
     ].join(' | ');
     container.innerHTML = `<div class="error">Error: ${error.message}<br><small style="opacity:.7">${debugInfo}</small></div>`;
+  } finally {
+    spinnerWatcher.disconnect();
   }
 };
 // Only auto-render on load if there is actual input (e.g. from ?i= URL param).
