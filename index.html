@@ -210,7 +210,7 @@ async function buildEmbeddedFontCSS(usedFonts) {
     if (src.startsWith('data:')) { embeddedCSS += rule + '\n'; continue; }
     if (!(src in fontCache)) {
       try {
-        const buf = await fetch('/dist/tikzjax/' + src).then(r => r.arrayBuffer());
+        const buf = await fetch('dist/tikzjax/' + src).then(r => r.arrayBuffer());
         if (buf.byteLength <= 5 * 1024 * 1024) {
           const bytes = new Uint8Array(buf);
           let binary = '';

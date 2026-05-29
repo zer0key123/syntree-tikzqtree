@@ -203,30 +203,38 @@ async function render(container, tree, options = {}) {
 
   // Wait for TikZJax to process
   return new Promise((resolve, reject) => {
-    // TikZJax replaces script with SVG, we observe for this
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.tagName === 'svg' || node.tagName === 'SVG') {
-            observer.disconnect();
-            const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-            titleEl.textContent = tree;
-            node.insertBefore(titleEl, node.firstChild);
-            node.setAttribute('role', 'img');
-            node.setAttribute('aria-label', tree);
-            containerEl.dataset.qtreeSource = tree;
-            resolve(node);
-            return;
-          }
-        }
-      }
-    });
+    let timeoutId;
 
-    observer.observe(containerEl, { childList: true, subtree: true });
+    // TikZJax fires 'tikzjax-load-finished' on the final SVG (bubbles:true)
+    // once rendering is complete — both for cached results and fresh TeX
+    // compilations.  Listening for this event is more reliable than watching
+    // for SVG node additions, because TikZJax first inserts a loading-spinner
+    // SVG while the TeX engine compiles, then replaces it with the real tree.
+    // A MutationObserver would fire on the spinner and resolve prematurely.
+    const onFinished = () => {
+      containerEl.removeEventListener('tikzjax-load-finished', onFinished);
+      clearTimeout(timeoutId);
+      const svgEl = containerEl.querySelector('svg');
+      if (svgEl) {
+        if (!svgEl.querySelector('title')) {
+          const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+          titleEl.textContent = tree;
+          svgEl.insertBefore(titleEl, svgEl.firstChild);
+        }
+        svgEl.setAttribute('role', 'img');
+        svgEl.setAttribute('aria-label', tree);
+        containerEl.dataset.qtreeSource = tree;
+        resolve(svgEl);
+      } else {
+        reject(new Error('TikZJax finished but no SVG found in container'));
+      }
+    };
+
+    containerEl.addEventListener('tikzjax-load-finished', onFinished);
 
     // Timeout after 30 seconds
-    setTimeout(() => {
-      observer.disconnect();
+    timeoutId = setTimeout(() => {
+      containerEl.removeEventListener('tikzjax-load-finished', onFinished);
       reject(new Error('TikZJax rendering timed out'));
     }, 30000);
 
