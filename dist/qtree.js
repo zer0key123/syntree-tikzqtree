@@ -61,6 +61,34 @@
       return tikzjaxLoading;
     }
 
+    // Check if a <script> element pointing to tikzjax.js already exists in the
+    // document (added by the page's HTML before qtree.js loaded). If it does,
+    // avoid injecting a second copy — just wait for it to execute. This prevents
+    // a double-load race where both scripts execute, the second skips the H-init
+    // guard (window.TikzJax already true), and window._tjProcessScripts gets
+    // overwritten with a broken I() closure where H is undefined.
+    if (typeof document !== 'undefined') {
+      const existingScript = Array.prototype.find.call(
+        document.querySelectorAll('script[src]'),
+        function(s) { return s.src && s.src.indexOf('tikzjax') !== -1; }
+      );
+      if (existingScript) {
+        tikzjaxLoading = new Promise(function(resolve) {
+          // Already executed (readyState complete or window.TikzJax set)?
+          if (window.TikzJax) { tikzjaxLoaded = true; resolve(); return; }
+          // Still loading — wait for its load event.
+          existingScript.addEventListener('load', function() {
+            tikzjaxLoaded = true; resolve();
+          }, { once: true });
+          // Safety: also poll in case the load event already fired without us.
+          setTimeout(function() {
+            if (window.TikzJax) { tikzjaxLoaded = true; resolve(); }
+          }, 50);
+        });
+        return tikzjaxLoading;
+      }
+    }
+
     tikzjaxLoading = new Promise((resolve, reject) => {
       // Add the required link element for TikZJax CSS
       const link = document.createElement('link');
