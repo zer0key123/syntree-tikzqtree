@@ -8,16 +8,10 @@ const TIKZJAX_DEFAULT = '/syntree-tikzqtree/dist/tikzjax/tikzjax.js';
 /**
  * Default TikZ preamble for qtree trees.
  *
- * Kept minimal so that TeX compilation succeeds on the first cold-cache render.
- * Extra packages (e.g. Cyrillic or IPA support) can be added via the
- * "extra preamble" field in the UI or via QTree.configure({ preamble: '...' }).
- *
- * For Cyrillic add:
- *   \usepackage[T2A]{fontenc}\usepackage[utf8]{inputenc}\usepackage{cm-unicode}
- * For IPA add:
- *   \usepackage[noenc]{tipa}
+ * Includes Cyrillic (T2A fontenc + cm-unicode), IPA (tipa), and amsmath.
+ * All of these packages are bundled inside tikzjax.js and load correctly.
  */
-const DEFAULT_PREAMBLE = `\\usepackage{amsmath}\\usetikzlibrary{positioning}`;
+const DEFAULT_PREAMBLE = `\\usepackage[T3,T2A,T1]{fontenc}\\usepackage[utf8]{inputenc}\\usepackage{cm-unicode}\\usepackage{amsmath}\\usepackage[noenc]{tipa}\\usetikzlibrary{positioning}`;
 
 /**
  * Configuration options
