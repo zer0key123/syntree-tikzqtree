@@ -119,6 +119,36 @@ img { border: 1px solid #bbbbbb; }
 <!-- Preload tikzjax fonts and engine immediately so the TeX Worker can warm up
      while the user is reading the page, rather than only on first Render click. -->
 <link rel="stylesheet" href="dist/tikzjax/fonts.css">
+<script>
+  // MutationObserver interceptor — must run BEFORE tikzjax.js so we can capture
+  // the callback tikzjax registers for its <script type="text/tikz"> watcher.
+  // render() in qtree.js uses window._tjTrigger(script) as a guaranteed fallback
+  // when the automatic MO detection fails to fire (e.g. on GitHub Pages cold load).
+  (function() {
+    var _OrigMO = window.MutationObserver;
+    var _tjCB = null;
+    function _PatchedMO(callback) {
+      var mo = new _OrigMO(callback);
+      var _origObserve = mo.observe.bind(mo);
+      mo.observe = function(target, options) {
+        // Detect tikzjax's body observer (childList + subtree on body element)
+        if (options && options.subtree && target && target.tagName &&
+            target.tagName.toLowerCase() === 'body') {
+          _tjCB = callback;
+          window._tjTrigger = function(scriptEl) {
+            // Manufacture the addedNodes list tikzjax's callback expects
+            var fakeMR = { addedNodes: [scriptEl], removedNodes: [] };
+            try { _tjCB([fakeMR]); } catch(e) { console.error('[tjTrigger]', e); }
+          };
+        }
+        return _origObserve(target, options);
+      };
+      return mo;
+    }
+    _PatchedMO.prototype = _OrigMO.prototype;
+    window.MutationObserver = _PatchedMO;
+  })();
+</script>
 <script async src="dist/tikzjax/tikzjax.js"></script>
 <script src="dist/qtree.js"></script>
 <script>

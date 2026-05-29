@@ -229,6 +229,21 @@
     containerEl.innerHTML = '';
     containerEl.appendChild(script);
 
+    // Fallback: if tikzjax's MutationObserver didn't fire automatically
+    // (can happen when the script is appended before tikzjax's c() sets up
+    // its observer, or in browsers where MO delivery is delayed), manually
+    // invoke the captured tikzjax MO callback via window._tjTrigger.
+    // We wait one microtask tick first to give the real MO a chance to fire.
+    Promise.resolve().then(() => {
+      if (window._tjTrigger && script.parentNode === containerEl) {
+        // Check if tikzjax has already replaced the script (spinner/SVG present).
+        // If the script is still there, the MO didn't pick it up — trigger manually.
+        if (containerEl.querySelector('script[type="text/tikz"]') === script) {
+          window._tjTrigger(script);
+        }
+      }
+    });
+
     // Wait for TikZJax to process
     return new Promise((resolve, reject) => {
       let timeoutId;
