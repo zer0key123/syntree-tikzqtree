@@ -45,6 +45,13 @@
       return Promise.resolve();
     }
 
+    // If tikzjax was pre-loaded via a <script> tag in the page HTML,
+    // window.TikzJax will already be true — skip creating a second script element.
+    if (typeof window !== 'undefined' && window.TikzJax) {
+      tikzjaxLoaded = true;
+      return Promise.resolve();
+    }
+
     if (tikzjaxLoading) {
       return tikzjaxLoading;
     }
@@ -238,11 +245,12 @@
 
       containerEl.addEventListener('tikzjax-load-finished', onFinished);
 
-      // Timeout after 30 seconds
+      // Timeout after 90 seconds (TeX compilation is slow on first render:
+      // the Worker must decompress ~70 MB of pre-built format + run WebAssembly).
       timeoutId = setTimeout(() => {
         containerEl.removeEventListener('tikzjax-load-finished', onFinished);
         reject(new Error('TikZJax rendering timed out'));
-      }, 30000);
+      }, 90000);
 
       // TikzJax watches document.body via its own MutationObserver and
       // automatically picks up the newly-appended <script type="text/tikz">.

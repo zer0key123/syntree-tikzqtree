@@ -116,11 +116,14 @@ img { border: 1px solid #bbbbbb; }
 <script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
 <link type="text/css" href="css/cupertino/jquery-ui-1.8.18.custom.css" rel="stylesheet">
 <script type="text/javascript" src="js/jquery-ui-1.8.18.custom.min.js"></script>
+<!-- Preload tikzjax fonts and engine immediately so the TeX Worker can warm up
+     while the user is reading the page, rather than only on first Render click. -->
+<link rel="stylesheet" href="dist/tikzjax/fonts.css">
+<script async src="dist/tikzjax/tikzjax.js"></script>
 <script src="dist/qtree.js"></script>
 <script>
-  // Resolve tikzjax paths relative to this page's URL.
-  // new URL('./', href) normalises the base so it always ends with '/'
-  // regardless of whether the URL has a trailing slash or not.
+  // Resolve tikzjax paths relative to this page's URL — used as fallback if
+  // the async tikzjax.js tag above hasn't finished loading when Render fires.
   (function() {
     var base = new URL('./', window.location.href).href;
     window.QTree.configure({
@@ -159,7 +162,7 @@ window.renderCustomTree = async function() {
   const pngTransBtn = document.getElementById('png-transparent-btn');
   const pngWhiteBtn = document.getElementById('png-white-btn');
 
-  container.innerHTML = '<span class="hint">Rendering…</span>';
+  container.innerHTML = '<span class="hint">Rendering… (first render may take 10–30 s while the TeX engine loads)</span>';
   svgBtn.disabled = pngTransBtn.disabled = pngWhiteBtn.disabled = true;
 
   try {
@@ -182,7 +185,13 @@ window.renderCustomTree = async function() {
 
     svgBtn.disabled = pngTransBtn.disabled = pngWhiteBtn.disabled = false;
   } catch (error) {
-    container.innerHTML = `<span class="error">Error: ${error.message}</span>`;
+    const debugInfo = [
+      'TikzJax: ' + (window.TikzJax ? 'loaded ✓' : 'NOT loaded ✗'),
+      'URL: ' + (() => { try { return new URL('dist/tikzjax/tikzjax.js', new URL('./', window.location.href).href).href; } catch(e) { return '?'; } })(),
+      'readyState: ' + document.readyState,
+      'IDB: ' + (() => { try { return typeof indexedDB !== 'undefined' ? 'ok' : 'unavailable'; } catch(e) { return 'blocked (' + e.message + ')'; } })()
+    ].join(' | ');
+    container.innerHTML = `<div class="error">Error: ${error.message}<br><small style="opacity:.7">${debugInfo}</small></div>`;
   }
 };
 // Only auto-render on load if there is actual input (e.g. from ?i= URL param).
