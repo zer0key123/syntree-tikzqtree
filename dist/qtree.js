@@ -200,6 +200,16 @@
     // Ensure TikZJax is loaded
     await loadTikZJax();
 
+    // TikZJax's c() function (which sets up the MutationObserver that detects
+    // <script type="text/tikz"> elements) runs either immediately when tikzjax.js
+    // executes (if document.readyState === 'complete') or on the 'load' event.
+    // We must wait for 'complete' before appending our script, otherwise we add
+    // it before the MutationObserver is active and c()'s initial DOM scan has
+    // already run — leaving the script unprocessed.
+    if (document.readyState !== 'complete') {
+      await new Promise(resolve => window.addEventListener('load', resolve, { once: true }));
+    }
+
     // Generate TikZ code
     const tikzCode = generateTikZCode(tree, options);
 
