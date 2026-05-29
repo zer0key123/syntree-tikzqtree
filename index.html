@@ -194,14 +194,15 @@ console.log = function(...args) {
   if (window._tjLogs.length > 20) window._tjLogs.shift();
 };
 
-// Catch unhandled Promise rejections (e.g. tikzjax's D.dispatchEvent(null) crash).
+// Catch unhandled Promise rejections — always log them, show in UI when rendering.
 window.addEventListener('unhandledrejection', function(evt) {
+  const msg = evt.reason instanceof Error ? evt.reason.message : String(evt.reason);
+  window._tjLogs.push('REJECT: ' + msg);
   const container = document.getElementById('custom-tree');
   if (!container) return;
   const isRendering = container.innerHTML.includes('Rendering') ||
                       container.innerHTML.includes('TeX engine');
   if (isRendering) {
-    const msg = evt.reason instanceof Error ? evt.reason.message : String(evt.reason);
     container.innerHTML = `<div class="error">Internal TikZJax error: ${msg}<br><small style="opacity:.7">Logs: ${window._tjLogs.slice(-5).join(' | ')}</small></div>`;
     evt.preventDefault();
   }
@@ -237,7 +238,9 @@ window.renderCustomTree = async function() {
   container.innerHTML = '<span class="hint">Rendering… (first render may take up to 60 s on first use)</span>';
   svgBtn.disabled = pngTransBtn.disabled = pngWhiteBtn.disabled = true;
 
-  // Watch for spinner appearance — confirms TikZJax picked up the script.
+  // Watch document.body for spinner/SVG addition anywhere — confirms TikZJax
+  // picked up the script. (The SVG is now created in a hidden tempHolder on body,
+  // not directly in the visible container, so we watch the full body subtree.)
   let spinnerSeen = false;
   const spinnerWatcher = new MutationObserver(mutations => {
     for (const m of mutations) {
@@ -250,12 +253,12 @@ window.renderCustomTree = async function() {
             const hint = container.querySelector('.hint');
             if (hint) hint.textContent = 'TeX engine compiling… this can take 30–60 s on first use';
           }
-          _origLog('[debug] node added to container:', tag, node.getAttribute && node.getAttribute('class'));
+          _origLog('[debug] node added to DOM:', tag, node.getAttribute && node.getAttribute('class'));
         }
       }
     }
   });
-  spinnerWatcher.observe(container, { childList: true });
+  spinnerWatcher.observe(document.body, { childList: true, subtree: true });
 
   try {
     const trimmed = treeInput.trim();
@@ -278,10 +281,11 @@ window.renderCustomTree = async function() {
   } catch (error) {
     const debugInfo = [
       'TikzJax: ' + (window.TikzJax ? '✓' : '✗'),
+      '_tjPS: ' + (typeof window._tjProcessScripts),
       'Spinner: ' + (spinnerSeen ? '✓ appeared' : '✗ never appeared — TikZJax did not process script'),
       'readyState: ' + document.readyState,
       'IDB: ' + (() => { try { return typeof indexedDB !== 'undefined' ? 'ok' : 'N/A'; } catch(e) { return 'blocked'; } })(),
-      'Logs: ' + (window._tjLogs.slice(-3).join(' | ') || '(none)')
+      'Logs: ' + (window._tjLogs.slice(-5).join(' | ') || '(none)')
     ].join(' | ');
     container.innerHTML = `<div class="error">Error: ${error.message}<br><small style="opacity:.7">${debugInfo}</small></div>`;
   } finally {

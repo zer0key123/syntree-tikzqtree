@@ -194,12 +194,8 @@ async function render(container, tree, options = {}) {
   // Ensure TikZJax is loaded
   await loadTikZJax();
 
-  // TikZJax's c() function (which sets up the MutationObserver that detects
-  // <script type="text/tikz"> elements) runs either immediately when tikzjax.js
-  // executes (if document.readyState === 'complete') or on the 'load' event.
-  // We must wait for 'complete' before appending our script, otherwise we add
-  // it before the MutationObserver is active and c()'s initial DOM scan has
-  // already run — leaving the script unprocessed.
+  // TikZJax's c() runs on window.load (or immediately if readyState === 'complete').
+  // Wait for the page to be fully loaded before proceeding.
   if (document.readyState !== 'complete') {
     await new Promise(resolve => window.addEventListener('load', resolve, { once: true }));
   }
@@ -219,24 +215,42 @@ async function render(container, tree, options = {}) {
   // Create the script element
   const script = createTikZScript(finalCode, preamble);
 
-  // Clear container and append script
-  containerEl.innerHTML = '';
-  containerEl.appendChild(script);
+  // Place the script in a hidden off-screen div attached directly to body.
+  // tikzjax's processing pipeline (window._tjProcessScripts) is called
+  // explicitly below — we no longer rely on tikzjax's MutationObserver.
+  const tempHolder = document.createElement('div');
+  tempHolder.style.cssText = 'position:absolute;left:-99999px;top:-99999px;' +
+                             'width:1px;height:1px;overflow:hidden;' +
+                             'visibility:hidden;pointer-events:none';
+  document.body.appendChild(tempHolder);
+  tempHolder.appendChild(script);
+
+  // --- Direct invocation ---
+  // window._tjProcessScripts is I() from tikzjax, exposed by our one-line
+  // patch in tikzjax.js: window._tjProcessScripts = I;
+  // Calling it directly bypasses the MutationObserver entirely.
+  if (typeof window._tjProcessScripts === 'function') {
+    window._tjProcessScripts([script]);
+  } else {
+    // Fallback: tikzjax.js wasn't patched — try the MO-intercept trigger.
+    Promise.resolve().then(() => {
+      if (window._tjTrigger) {
+        const s = tempHolder.querySelector('script[type="text/tikz"]');
+        if (s === script) window._tjTrigger(script);
+      }
+    });
+  }
 
   // Wait for TikZJax to process
   return new Promise((resolve, reject) => {
     let timeoutId;
 
     // TikZJax fires 'tikzjax-load-finished' on the final SVG (bubbles:true)
-    // once rendering is complete — both for cached results and fresh TeX
-    // compilations.  Listening for this event is more reliable than watching
-    // for SVG node additions, because TikZJax first inserts a loading-spinner
-    // SVG while the TeX engine compiles, then replaces it with the real tree.
-    // A MutationObserver would fire on the spinner and resolve prematurely.
+    // once rendering is complete — for both cached results and fresh TeX runs.
     const onFinished = () => {
-      containerEl.removeEventListener('tikzjax-load-finished', onFinished);
+      tempHolder.removeEventListener('tikzjax-load-finished', onFinished);
       clearTimeout(timeoutId);
-      const svgEl = containerEl.querySelector('svg');
+      const svgEl = tempHolder.querySelector('svg');
       if (svgEl) {
         if (!svgEl.querySelector('title')) {
           const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
@@ -245,24 +259,27 @@ async function render(container, tree, options = {}) {
         }
         svgEl.setAttribute('role', 'img');
         svgEl.setAttribute('aria-label', tree);
+        // Move the finished SVG into the visible container
+        containerEl.innerHTML = '';
+        containerEl.appendChild(svgEl);
         containerEl.dataset.qtreeSource = tree;
+        if (tempHolder.parentNode) document.body.removeChild(tempHolder);
         resolve(svgEl);
       } else {
-        reject(new Error('TikZJax finished but no SVG found in container'));
+        if (tempHolder.parentNode) document.body.removeChild(tempHolder);
+        reject(new Error('TikZJax finished but no SVG found'));
       }
     };
 
-    containerEl.addEventListener('tikzjax-load-finished', onFinished);
+    tempHolder.addEventListener('tikzjax-load-finished', onFinished);
 
-    // Timeout after 90 seconds (TeX compilation is slow on first render:
+    // Timeout after 90 seconds (TeX compilation is slow on first cold render:
     // the Worker must decompress ~70 MB of pre-built format + run WebAssembly).
     timeoutId = setTimeout(() => {
-      containerEl.removeEventListener('tikzjax-load-finished', onFinished);
+      tempHolder.removeEventListener('tikzjax-load-finished', onFinished);
+      if (tempHolder.parentNode) document.body.removeChild(tempHolder);
       reject(new Error('TikZJax rendering timed out'));
     }, 90000);
-
-    // TikzJax watches document.body via its own MutationObserver and
-    // automatically picks up the newly-appended <script type="text/tikz">.
   });
 }
 
