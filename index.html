@@ -235,7 +235,7 @@ window.renderCustomTree = async function() {
   const pngTransBtn = document.getElementById('png-transparent-btn');
   const pngWhiteBtn = document.getElementById('png-white-btn');
 
-  container.innerHTML = '<span class="hint">Rendering… (first render may take up to 60 s on first use)</span>';
+  container.innerHTML = '<span class="hint">Rendering… (initializing TeX engine on first use — may take 1–2 min)</span>';
   svgBtn.disabled = pngTransBtn.disabled = pngWhiteBtn.disabled = true;
 
   // Watch document.body for spinner/SVG addition anywhere — confirms TikZJax

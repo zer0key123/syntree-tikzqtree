@@ -260,6 +260,14 @@ async function render(container, tree, options = {}) {
     });
   }
 
+  // On a cold first load the TeX engine Worker takes a long time to initialize
+  // (WASM instantiation + decompressing the pre-built TeX format, up to 2+ min).
+  // tikzjax.js exposes H (the engine Promise) as window._tjEngine so we can
+  // await it here before starting the compile timeout, preventing false timeouts.
+  if (typeof window._tjEngine !== 'undefined') {
+    try { await window._tjEngine; } catch (_e) { /* V() will surface any error */ }
+  }
+
   // Wait for TikZJax to process
   return new Promise((resolve, reject) => {
     let timeoutId;
