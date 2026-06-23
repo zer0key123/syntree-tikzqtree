@@ -234,39 +234,24 @@ async function render(container, tree, options = {}) {
   // Create the script element
   const script = createTikZScript(finalCode, preamble);
 
-  // Place the script in a hidden off-screen div attached directly to body.
-  // tikzjax's processing pipeline (window._tjProcessScripts) is called
-  // explicitly below — we no longer rely on tikzjax's MutationObserver.
+  // Append script into tempHolder FIRST, then add tempHolder to body as one
+  // atomic DOM operation. This produces a single MO mutation record
+  // (addedNodes=[tempHolder]) rather than two separate records, so tikzjax's
+  // MO callback finds the script exactly once instead of twice.
+  //
+  // Two records (old order: body←tempHolder, tempHolder←script) caused the MO
+  // to find the script both as a direct addedNode (record 2) and via
+  // getElementsByTagName on tempHolder (record 1 live-DOM query). That led to
+  // two concurrent D() calls that raced to set script.loader; the second call
+  // always overwrote it with a detached spinner, so V() later tried to put the
+  // rendered SVG into a detached node — the tikzjax-load-finished event never
+  // reached tempHolder and the render timed out.
   const tempHolder = document.createElement('div');
   tempHolder.style.cssText = 'position:absolute;left:-99999px;top:-99999px;' +
                              'width:1px;height:1px;overflow:hidden;' +
                              'visibility:hidden;pointer-events:none';
-  document.body.appendChild(tempHolder);
-  tempHolder.appendChild(script);
-
-  // --- Direct invocation ---
-  // window._tjProcessScripts is I() from tikzjax, exposed by our one-line
-  // patch in tikzjax.js: window._tjProcessScripts = I;
-  // Calling it directly bypasses the MutationObserver entirely.
-  if (typeof window._tjProcessScripts === 'function') {
-    window._tjProcessScripts([script]);
-  } else {
-    // Fallback: tikzjax.js wasn't patched — try the MO-intercept trigger.
-    Promise.resolve().then(() => {
-      if (window._tjTrigger) {
-        const s = tempHolder.querySelector('script[type="text/tikz"]');
-        if (s === script) window._tjTrigger(script);
-      }
-    });
-  }
-
-  // On a cold first load the TeX engine Worker takes a long time to initialize
-  // (WASM instantiation + decompressing the pre-built TeX format, up to 2+ min).
-  // tikzjax.js exposes H (the engine Promise) as window._tjEngine so we can
-  // await it here before starting the compile timeout, preventing false timeouts.
-  if (typeof window._tjEngine !== 'undefined') {
-    try { await window._tjEngine; } catch (_e) { /* V() will surface any error */ }
-  }
+  tempHolder.appendChild(script);       // script inside holder before DOM insertion
+  document.body.appendChild(tempHolder); // single mutation → MO finds script once
 
   // Wait for TikZJax to process
   return new Promise((resolve, reject) => {
