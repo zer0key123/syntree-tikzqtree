@@ -302,7 +302,11 @@ window.copyLink = function() {
   if (draw)     params.set('d', draw);
 
   const url = window.location.origin + window.location.pathname +
-              (params.toString() ? '?' + params.toString() : '');
+              (params.toString() ? '?' + params.toString()
+                .replace(/%5B/gi, '[').replace(/%5D/gi, ']')
+                .replace(/%7B/gi, '{').replace(/%7D/gi, '}')
+                .replace(/%5C/gi, '\\').replace(/%2C/gi, ',')
+                : '');
 
   const btn = document.getElementById('copy-link-btn');
   navigator.clipboard.writeText(url).then(() => {
