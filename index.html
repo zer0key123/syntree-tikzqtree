@@ -53,6 +53,12 @@
 		      <label for="draw-input">draw / after-tree commands</label>
 		      <textarea id="draw-input" spellcheck="false"></textarea>
 		    </div>
+		    <div style="margin-top: 10px;">
+		      <label style="cursor:pointer">
+		        <input type="checkbox" id="pixelated-input"> Pixel draw edges
+		        <span style="font-size:small;color:#666">(adds Bresenham line-art decoration; use <code>edge from parent/.style={pixel draw}</code>)</span>
+		      </label>
+		    </div>
 		</div>
 	
 		<h3><!--<a href="#">-->
@@ -151,7 +157,7 @@ img { border: 1px solid #bbbbbb; }
   })();
 </script>
 <script async src="dist/tikzjax/tikzjax.js?v=8"></script>
-<script src="dist/qtree.js?v=8"></script>
+<script src="dist/qtree.js?v=9"></script>
 <script>
   // Resolve tikzjax paths relative to this page's URL — used as fallback if
   // the async tikzjax.js tag above hasn't finished loading when Render fires.
@@ -165,6 +171,161 @@ img { border: 1px solid #bbbbbb; }
 </script>
 <script type="module">
 const QTree = window.QTree;
+
+// ── Pixel draw decoration macros ──────────────────────────────────────────────
+// Bresenham line-art edge decoration.  Preamble part (\usetikzlibrary) goes
+// into data-add-to-preamble; everything else goes into beforeTree so we don't
+// hit the tikzjax input-buffer limit that fires on long single-line preambles.
+const PIXEL_DRAW_PREAMBLE = String.raw`\usetikzlibrary{decorations}`;
+const PIXEL_DRAW_BEFORE_TREE = String.raw`\newlength{\pxsz}\setlength{\pxsz}{2pt}\newlength{\pixeltmpx}\newlength{\pixeltmpy}\newlength{\decsnaplx}\newlength{\decstartx}\newlength{\decstarty}\newcount\decstartpx\newcount\decstartpy\newtoks\pixelpath\newcount\deccx\newcount\deccy\newcount\decpx\newcount\decpy\newcount\cellfirst\newcount\lastcx\newcount\lastcy\newcount\bpx\newcount\bpy\newcount\bqx\newcount\bqy\newcount\bdx\newcount\bdy\newcount\bsx\newcount\bsy\newcount\ber\newcount\betwo\newcount\arrowdir\newcount\arrtipx\newcount\arrtipy
+\newcommand{\pixelpathinit}{\global\pixelpath={}}
+\newcommand{\pixelpathflush}{%
+  \pgfscope\pgftransformreset\the\pixelpath\pgfusepath{fill}%
+  \endpgfscope}
+\newcommand{\addpixel}[2]{%
+  \pixeltmpx=#1\pxsz\relax\pixeltmpy=#2\pxsz\relax
+  \xdef\pixeltmpstr{%
+    \noexpand\pgfpathrectangle
+      {\noexpand\pgfpoint{\the\pixeltmpx}{\the\pixeltmpy}}%
+      {\noexpand\pgfpoint{\the\pxsz}{\the\pxsz}}}%
+  \toks0\expandafter{\pixeltmpstr}%
+  \edef\pixeltmpcat{\the\pixelpath\the\toks0}%
+  \global\pixelpath\expandafter{\pixeltmpcat}}
+\newcommand{\addpixeldedup}[2]{%
+  \ifnum\cellfirst=1\addpixel{#1}{#2}%
+    \global\lastcx=#1\relax\global\lastcy=#2\relax\global\cellfirst=0
+  \else\ifnum#1=\lastcx\ifnum#2=\lastcy\else\addpixel{#1}{#2}%
+    \global\lastcx=#1\relax\global\lastcy=#2\relax\fi
+  \else\addpixel{#1}{#2}%
+    \global\lastcx=#1\relax\global\lastcy=#2\relax\fi\fi}
+\newcommand{\bresenhamstep}{%
+  \addpixeldedup{\the\bpx}{\the\bpy}%
+  \ifnum\bpx=\bqx\ifnum\bpy=\bqy\else
+    \betwo=\ber\multiply\betwo by 2
+    \ifnum\betwo>-\bdy\advance\ber by-\bdy\advance\bpx by\bsx\fi
+    \ifnum\betwo<\bdx\advance\ber by\bdx\advance\bpy by\bsy\fi
+    \bresenhamstep\fi
+  \else\betwo=\ber\multiply\betwo by 2
+    \ifnum\betwo>-\bdy\advance\ber by-\bdy\advance\bpx by\bsx\fi
+    \ifnum\betwo<\bdx\advance\ber by\bdx\advance\bpy by\bsy\fi
+    \bresenhamstep\fi}
+\newcommand{\bresenhampath}[4]{%
+  \bpx=#1\relax\bpy=#2\relax\bqx=#3\relax\bqy=#4\relax
+  \bdx=\bqx\advance\bdx by-\bpx\ifnum\bdx<0\multiply\bdx by-1\fi
+  \bdy=\bqy\advance\bdy by-\bpy\ifnum\bdy<0\multiply\bdy by-1\fi
+  \ifnum\bpx<\bqx\bsx=1\else\bsx=-1\fi
+  \ifnum\bpy<\bqy\bsy=1\else\bsy=-1\fi
+  \ber=\bdx\advance\ber by-\bdy\bresenhamstep}
+\newcommand{\getcanvaspos}{%
+  \pgfgettransformentries%
+    {\pixdecma}{\pixdecmb}{\pixdecmc}{\pixdecmd}{\deccanvx}{\deccanvy}}
+\newcount\decsnaptmpA
+\newcommand{\snapabs}[3]{%
+  \decsnaptmpA=\pxsz\divide\decsnaptmpA by 2
+  \decsnaplx=#1\relax
+  \ifdim\decsnaplx<0pt\advance\decsnaplx by -\decsnaptmpA sp
+  \else\advance\decsnaplx by \decsnaptmpA sp\fi
+  \decsnaptmpA=\decsnaplx\divide\decsnaptmpA by \pxsz
+  \global#2=\decsnaptmpA\relax}
+\newcommand{\snapx}[1]{%
+  \decsnaplx=\deccanvx\relax\advance\decsnaplx by -\decstartx
+  \decsnaptmpA=\pxsz\divide\decsnaptmpA by 2
+  \ifdim\decsnaplx<0pt\advance\decsnaplx by -\decsnaptmpA sp
+  \else\advance\decsnaplx by \decsnaptmpA sp\fi
+  \decsnaptmpA=\decsnaplx\divide\decsnaptmpA by \pxsz
+  \advance\decsnaptmpA by \decstartpx\global#1=\decsnaptmpA\relax}
+\newcommand{\snapy}[1]{%
+  \decsnaplx=\deccanvy\relax\advance\decsnaplx by -\decstarty
+  \decsnaptmpA=\pxsz\divide\decsnaptmpA by 2
+  \ifdim\decsnaplx<0pt\advance\decsnaplx by -\decsnaptmpA sp
+  \else\advance\decsnaplx by \decsnaptmpA sp\fi
+  \decsnaptmpA=\decsnaplx\divide\decsnaptmpA by \pxsz
+  \advance\decsnaptmpA by \decstartpy\global#1=\decsnaptmpA\relax}
+\newcommand{\initstartpos}{%
+  \global\decstartx=\deccanvx\relax\global\decstarty=\deccanvy\relax
+  \snapabs{\deccanvx}{\decstartpx}{\decstartpx}%
+  \snapabs{\deccanvy}{\decstartpy}{\decstartpy}%
+  \decsnaptmpA=\pxsz\divide\decsnaptmpA by 2
+  \decsnaplx=\decstartx\relax
+  \ifdim\decsnaplx<0pt\advance\decsnaplx by -\decsnaptmpA sp
+  \else\advance\decsnaplx by \decsnaptmpA sp\fi
+  \decsnaptmpA=\decsnaplx\divide\decsnaptmpA by \pxsz
+  \global\decstartpx=\decsnaptmpA\relax
+  \decsnaptmpA=\pxsz\divide\decsnaptmpA by 2
+  \decsnaplx=\decstarty\relax
+  \ifdim\decsnaplx<0pt\advance\decsnaplx by -\decsnaptmpA sp
+  \else\advance\decsnaplx by \decsnaptmpA sp\fi
+  \decsnaptmpA=\decsnaplx\divide\decsnaptmpA by \pxsz
+  \global\decstartpy=\decsnaptmpA\relax}
+\newcommand{\computearrowdir}{%
+  \pgfmathsetmacro{\arrawangle}{atan2(\pixdecmc,\pixdecma)}%
+  \pgfmathtruncatemacro{\arrsnap}{mod(round(\arrawangle/45)+800,8)}%
+  \global\arrowdir=\arrsnap\relax}
+\newcommand{\armpx}[2]{%
+  \pgfmathtruncatemacro{\afx}{\arrtipx+(#1)}%
+  \pgfmathtruncatemacro{\afy}{\arrtipy+(#2)}%
+  \addpixel{\afx}{\afy}}
+\newcommand{\drawarrowhead}{%
+  \addpixel{\the\arrtipx}{\the\arrtipy}%
+  \ifnum\arrowdir=0\armpx{-1}{-1}\armpx{-2}{-2}\armpx{-1}{1}\armpx{-2}{2}\fi
+  \ifnum\arrowdir=1\armpx{0}{1}\armpx{0}{2}\armpx{-1}{0}\armpx{-2}{0}\fi
+  \ifnum\arrowdir=2\armpx{1}{1}\armpx{2}{2}\armpx{-1}{1}\armpx{-2}{2}\fi
+  \ifnum\arrowdir=3\armpx{0}{1}\armpx{0}{2}\armpx{1}{0}\armpx{2}{0}\fi
+  \ifnum\arrowdir=4\armpx{1}{-1}\armpx{2}{-2}\armpx{1}{1}\armpx{2}{2}\fi
+  \ifnum\arrowdir=5\armpx{0}{-1}\armpx{0}{-2}\armpx{1}{0}\armpx{2}{0}\fi
+  \ifnum\arrowdir=6\armpx{1}{-1}\armpx{2}{-2}\armpx{-1}{-1}\armpx{-2}{-2}\fi
+  \ifnum\arrowdir=7\armpx{0}{-1}\armpx{0}{-2}\armpx{-1}{0}\armpx{-2}{0}\fi}
+\pgfdeclaredecoration{pixel draw}{initial}{
+  \state{initial}[width=0pt,next state=step,
+    persistent precomputation={\pixelpathinit\global\cellfirst=1}
+  ]{\getcanvaspos\initstartpos\snapx{\decpx}\snapy{\decpy}}
+  \state{step}[width=\pxsz]{%
+    \getcanvaspos\snapx{\deccx}\snapy{\deccy}%
+    \bresenhampath{\the\decpx}{\the\decpy}{\the\deccx}{\the\deccy}%
+    \global\decpx=\deccx\global\decpy=\deccy}
+  \state{final}{%
+    \getcanvaspos\snapx{\deccx}\snapy{\deccy}%
+    \ifnum\deccx=\decstartpx\ifnum\deccy=\decstartpy
+      \ifnum\decpx=\decstartpx\ifnum\decpy=\decstartpy\else
+        \pgfmathtruncatemacro{\decextrx}{\the\decpx+round(\pixdecma)}%
+        \pgfmathtruncatemacro{\decextry}{\the\decpy+round(-\pixdecmc)}%
+        \global\deccx=\decextrx\relax\global\deccy=\decextry\relax
+      \fi\else
+        \pgfmathtruncatemacro{\decextrx}{\the\decpx+round(\pixdecma)}%
+        \pgfmathtruncatemacro{\decextry}{\the\decpy+round(-\pixdecmc)}%
+        \global\deccx=\decextrx\relax\global\deccy=\decextry\relax
+      \fi\fi\fi
+    \bresenhampath{\the\decpx}{\the\decpy}{\the\deccx}{\the\deccy}%
+    \pixelpathflush}}
+\pgfdeclaredecoration{pixel draw arrow}{initial}{
+  \state{initial}[width=0pt,next state=step,
+    persistent precomputation={\pixelpathinit\global\cellfirst=1}
+  ]{\getcanvaspos\initstartpos\snapx{\decpx}\snapy{\decpy}}
+  \state{step}[width=\pxsz]{%
+    \getcanvaspos\snapx{\deccx}\snapy{\deccy}%
+    \bresenhampath{\the\decpx}{\the\decpy}{\the\deccx}{\the\deccy}%
+    \global\decpx=\deccx\global\decpy=\deccy}
+  \state{final}{%
+    \getcanvaspos\snapx{\deccx}\snapy{\deccy}%
+    \computearrowdir
+    \ifnum\deccx=\decstartpx\ifnum\deccy=\decstartpy
+      \ifnum\decpx=\decstartpx\ifnum\decpy=\decstartpy\else
+        \pgfmathtruncatemacro{\decextrx}{\the\decpx+round(\pixdecma)}%
+        \pgfmathtruncatemacro{\decextry}{\the\decpy+round(-\pixdecmc)}%
+        \global\deccx=\decextrx\relax\global\deccy=\decextry\relax
+      \fi\else
+        \pgfmathtruncatemacro{\decextrx}{\the\decpx+round(\pixdecma)}%
+        \pgfmathtruncatemacro{\decextry}{\the\decpy+round(-\pixdecmc)}%
+        \global\deccx=\decextrx\relax\global\deccy=\decextry\relax
+      \fi\fi\fi
+    \bresenhampath{\the\decpx}{\the\decpy}{\the\deccx}{\the\deccy}%
+    \global\arrtipx=\deccx\global\arrtipy=\deccy
+    \drawarrowhead\pixelpathflush}}
+\tikzset{
+  pixel draw/.style={decorate,decoration={pixel draw},draw=none},
+  pixel draw ->/.style={decorate,decoration={pixel draw arrow},draw=none},
+}`;
+
 const urlParams = new URLSearchParams(window.location.search);
 const tree = urlParams.get('i');
 if (tree !== null) {
@@ -181,6 +342,10 @@ if (preambleCommands !== null) {
 const optionCommands = urlParams.get('o');
 if (optionCommands !== null) {
 	document.getElementById('tikz-options-input').value = optionCommands;
+}
+const pixelParam = urlParams.get('pixel');
+if (pixelParam === '1') {
+	document.getElementById('pixelated-input').checked = true;
 }
 
 // ── TikZJax diagnostics ────────────────────────────────────────────────────
@@ -259,6 +424,7 @@ window.renderCustomTree = async function() {
   const tikzOptionsInput = document.getElementById('tikz-options-input').value;
   const preambleInput = document.getElementById('preamble-input').value;
   const drawInput = document.getElementById('draw-input').value;
+  const pixelated = document.getElementById('pixelated-input').checked;
   const container = document.getElementById('custom-tree');
   const svgBtn = document.getElementById('download-svg-btn');
   const pngTransBtn = document.getElementById('png-transparent-btn');
@@ -303,12 +469,17 @@ window.renderCustomTree = async function() {
       if (parsed) {
         const { preambleRaw, body } = parsed;
         const { preamble: preambleOnly, beforeTree: bodyDecls } = window._splitPreamble(preambleRaw);
+        const fdParts = [];
+        if (pixelated) fdParts.push(PIXEL_DRAW_BEFORE_TREE);
+        if (bodyDecls) fdParts.push(bodyDecls);
         const renderOpts = {
           tikzOptions: tikzOptionsInput,
           afterTree: drawInput,
           raw: false,
-          preamble: (QTree.defaultPreamble || '') + preambleOnly,
-          beforeTree: bodyDecls || undefined
+          preamble: (QTree.defaultPreamble || '')
+            + (pixelated ? PIXEL_DRAW_PREAMBLE : '')
+            + preambleOnly,
+          beforeTree: fdParts.length ? fdParts.join('\n') : undefined
         };
         // Show the assembled TeX so the user can verify what's being compiled
         const generatedTeX = QTree.generateTikZCode(body, renderOpts);
@@ -327,10 +498,15 @@ window.renderCustomTree = async function() {
     const extraPreamble = preambleInput.trim();
     let renderPreamble = undefined;
     let beforeTree = undefined;
-    if (extraPreamble) {
+    if (extraPreamble || pixelated) {
       const { preamble: preambleOnly, beforeTree: bodyDecls } = window._splitPreamble(extraPreamble);
-      renderPreamble = (QTree.defaultPreamble || '') + preambleOnly;
-      beforeTree = bodyDecls || undefined;
+      renderPreamble = (QTree.defaultPreamble || '')
+        + (pixelated ? PIXEL_DRAW_PREAMBLE : '')
+        + preambleOnly;
+      const parts = [];
+      if (pixelated) parts.push(PIXEL_DRAW_BEFORE_TREE);
+      if (bodyDecls) parts.push(bodyDecls);
+      beforeTree = parts.length ? parts.join('\n') : undefined;
     }
 
     const normalOpts = {
@@ -365,16 +541,18 @@ window.renderCustomTree = async function() {
   }
 };
 window.copyLink = function() {
-  const tree    = document.getElementById('tree-input').value;
-  const options = document.getElementById('tikz-options-input').value;
+  const tree     = document.getElementById('tree-input').value;
+  const options  = document.getElementById('tikz-options-input').value;
   const preamble = document.getElementById('preamble-input').value;
-  const draw    = document.getElementById('draw-input').value;
+  const draw     = document.getElementById('draw-input').value;
+  const pixel    = document.getElementById('pixelated-input').checked;
 
   const params = new URLSearchParams();
   if (tree)     params.set('i', tree);
   if (options)  params.set('o', options);
   if (preamble) params.set('p', preamble);
   if (draw)     params.set('d', draw);
+  if (pixel)    params.set('pixel', '1');
 
   const url = window.location.origin + window.location.pathname +
               (params.toString() ? '?' + params.toString()
