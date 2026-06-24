@@ -68,10 +68,6 @@
 			</div>
 	</div>
 	<br />
-
-	<div id="image-goes-here"></div>
-	<div id="out" style="text-align: center; margin-bottom: 1em;"></div>
-
 	<div style="text-align: center;">
 		<div class="actions">
       		<button class="primary" onclick="renderCustomTree()">Render</button>
@@ -349,6 +345,14 @@ window.downloadSVG = async function() {
     if (m) usedFonts.add(m[1].trim());
   });
   svg.querySelectorAll('[font-family]').forEach(el => usedFonts.add(el.getAttribute('font-family').trim()));
+
+  // TeX text elements are fill-only: the parent group sets stroke="#000" for
+  // paths (tree branches, lines), but text inherits that stroke and gets a
+  // visible black outline when the fill is a different colour (e.g. \textcolor).
+  // Suppress it by marking every <text> element with stroke="none".
+  svg.querySelectorAll('text').forEach(t => {
+    if (!t.hasAttribute('stroke')) t.setAttribute('stroke', 'none');
+  });
 
   let svgData = new XMLSerializer().serializeToString(svg);
 
