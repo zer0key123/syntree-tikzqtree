@@ -234,29 +234,19 @@ async function render(container, tree, options = {}) {
   // Create the script element
   const script = createTikZScript(finalCode, preamble);
 
-  // Append script into tempHolder FIRST, then add tempHolder to body as one
-  // atomic DOM operation. This produces a single MO mutation record
-  // (addedNodes=[tempHolder]) rather than two separate records, so tikzjax's
-  // MO callback finds the script exactly once instead of twice.
-  //
-  // Two records (old order: body←tempHolder, tempHolder←script) caused the MO
-  // to find the script both as a direct addedNode (record 2) and via
-  // getElementsByTagName on tempHolder (record 1 live-DOM query). That led to
-  // two concurrent D() calls that raced to set script.loader; the second call
-  // always overwrote it with a detached spinner, so V() later tried to put the
-  // rendered SVG into a detached node — the tikzjax-load-finished event never
-  // reached tempHolder and the render timed out.
+  // Place script in a hidden off-screen div attached to body.
   const tempHolder = document.createElement('div');
   tempHolder.style.cssText = 'position:absolute;left:-99999px;top:-99999px;' +
                              'width:1px;height:1px;overflow:hidden;' +
                              'visibility:hidden;pointer-events:none';
-  tempHolder.appendChild(script);       // script inside holder before DOM insertion
-  document.body.appendChild(tempHolder); // single mutation → MO finds script once
+  document.body.appendChild(tempHolder);
+  tempHolder.appendChild(script);
 
-  // Explicitly invoke tikzjax's processing pipeline.  This runs first
-  // (synchronously, before the MO microtask fires), so D() sets script._tjPrs=1
-  // and the MO's later I([script]) call is a no-op via the _tjPrs guard we
-  // patched into tikzjax.js.
+  // Explicitly invoke tikzjax's processing pipeline so the MO isn't the
+  // sole trigger (MO timing on cold load can be unreliable).
+  // tikzjax.js is patched so D() guards `if(!A.loader)` before creating the
+  // spinner, meaning only the first D() call wins — the MO's duplicate call
+  // is a no-op, avoiding the A.loader overwrite race.
   if (typeof window._tjProcessScripts === 'function') {
     window._tjProcessScripts([script]);
   }
