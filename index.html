@@ -222,6 +222,18 @@ document.addEventListener('tikzjax-load-finished', function(e) {
   _origLog('[debug] tikzjax-load-finished at document; target:', e.target && e.target.tagName, 'bubbles:', e.bubbles);
 }, true);
 
+// Split a preamble string into content that must stay in the LaTeX preamble
+// (\usepackage / \usetikzlibrary) vs. content that can live in the document
+// body before \begin{tikzpicture} (\newcommand, \newlength, \tikzset, etc.).
+// Keeping data-add-to-preamble short avoids the "source array is too long"
+// RangeError that tikzjax throws when that attribute exceeds its buffer.
+window._splitPreamble = function(preamble) {
+  const preambleOnlyRe = /\\(?:usepackage|usetikzlibrary|RequirePackage)(?:\s*\[[^\]]*\])?\s*\{[^}]*\}/g;
+  const preambleOnly = (preamble.match(preambleOnlyRe) || []).join('');
+  const bodyLevel   = preamble.replace(preambleOnlyRe, '').trim();
+  return { preamble: preambleOnly, beforeTree: bodyLevel };
+};
+
 window.renderCustomTree = async function() {
   const treeInput = document.getElementById('tree-input').value;
   const tikzOptionsInput = document.getElementById('tikz-options-input').value;
@@ -264,14 +276,20 @@ window.renderCustomTree = async function() {
        trimmed.startsWith('\\draw') || trimmed.startsWith('\\node'));
 
     const extraPreamble = preambleInput.trim();
+    let renderPreamble = undefined;
+    let beforeTree = undefined;
+    if (extraPreamble) {
+      const { preamble: preambleOnly, beforeTree: bodyDecls } = window._splitPreamble(extraPreamble);
+      renderPreamble = (QTree.defaultPreamble || '') + preambleOnly;
+      beforeTree = bodyDecls || undefined;
+    }
 
     await QTree.render(container, treeInput, {
       tikzOptions: tikzOptionsInput,
       afterTree: drawInput,
       raw: isRaw,
-      preamble: extraPreamble
-        ? (QTree.defaultPreamble || '') + extraPreamble
-        : undefined   // undefined → use config.preamble (DEFAULT_PREAMBLE)
+      preamble: renderPreamble,
+      beforeTree: beforeTree
     });
 
     svgBtn.disabled = pngTransBtn.disabled = pngWhiteBtn.disabled = false;

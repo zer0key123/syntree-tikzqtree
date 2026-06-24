@@ -124,6 +124,7 @@
       tikzOptions = '',
       treeOptions = '',
       afterTree = '',
+      beforeTree = '',
       raw = false
     } = options;
 
@@ -133,7 +134,8 @@
     }
 
     const tikzOptionsStr = tikzOptions ? `[${tikzOptions}]` : '';
-    let code = `\\begin{tikzpicture}${tikzOptionsStr}\n`;
+    let code = beforeTree ? `${beforeTree}\n` : '';
+    code += `\\begin{tikzpicture}${tikzOptionsStr}\n`;
 
     if (raw) {
       // Raw TikZ body: multiple \Tree commands, \begin{scope}, \draw, etc.
