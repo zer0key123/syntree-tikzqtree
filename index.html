@@ -305,7 +305,9 @@ window.copyLink = function() {
               (params.toString() ? '?' + params.toString()
                 .replace(/%5B/gi, '[').replace(/%5D/gi, ']')
                 .replace(/%7B/gi, '{').replace(/%7D/gi, '}')
+                .replace(/%28/gi, '(').replace(/%29/gi, ')')
                 .replace(/%5C/gi, '\\').replace(/%2C/gi, ',')
+                .replace(/%3B/gi, ';').replace(/%24/gi, '$')
                 : '');
 
   const btn = document.getElementById('copy-link-btn');
