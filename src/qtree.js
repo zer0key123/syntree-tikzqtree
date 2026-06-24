@@ -119,9 +119,9 @@ function generateTikZCode(tree, options = {}) {
     raw = false
   } = options;
 
-  // Complete tikzpicture passed directly — return verbatim
+  // Complete tikzpicture passed directly — prepend beforeTree if set, then return verbatim
   if (tree.trim().startsWith('\\begin{tikzpicture}')) {
-    return tree;
+    return beforeTree ? `${beforeTree}\n${tree}` : tree;
   }
 
   const tikzOptionsStr = tikzOptions ? `[${tikzOptions}]` : '';

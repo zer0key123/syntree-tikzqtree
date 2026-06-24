@@ -222,6 +222,22 @@ document.addEventListener('tikzjax-load-finished', function(e) {
   _origLog('[debug] tikzjax-load-finished at document; target:', e.target && e.target.tagName, 'bubbles:', e.bubbles);
 }, true);
 
+// Parse a complete LaTeX document (\documentclass ... \end{document}) into its
+// preamble (minus the \documentclass line) and body (between \begin{document}
+// and \end{document}).  Returns null if the structure isn't found.
+window._parseFullDocument = function(source) {
+  const beginDocIdx = source.indexOf('\\begin{document}');
+  if (beginDocIdx < 0) return null;
+  const endDocIdx = source.lastIndexOf('\\end{document}');
+  const preambleRaw = source.slice(0, beginDocIdx)
+    .replace(/\\documentclass(?:\s*\[[^\]]*\])?\s*\{[^}]*\}/g, '')
+    .trim();
+  const body = endDocIdx > beginDocIdx
+    ? source.slice(beginDocIdx + '\\begin{document}'.length, endDocIdx).trim()
+    : source.slice(beginDocIdx + '\\begin{document}'.length).trim();
+  return { preambleRaw, body };
+};
+
 // Split a preamble string into content that must stay in the LaTeX preamble
 // (\usepackage / \usetikzlibrary) vs. content that can live in the document
 // body before \begin{tikzpicture} (\newcommand, \newlength, \tikzset, etc.).
@@ -271,6 +287,28 @@ window.renderCustomTree = async function() {
 
   try {
     const trimmed = treeInput.trim();
+
+    // ── Full LaTeX document (\documentclass … \end{document}) ──────────────
+    // tikzjax already wraps content in its own document structure, so a second
+    // \documentclass causes a "could not find input.dvi" failure.  Extract the
+    // user's preamble and body and feed them through the normal split path.
+    if (trimmed.startsWith('\\documentclass')) {
+      const parsed = window._parseFullDocument(trimmed);
+      if (parsed) {
+        const { preambleRaw, body } = parsed;
+        const { preamble: preambleOnly, beforeTree: bodyDecls } = window._splitPreamble(preambleRaw);
+        await QTree.render(container, body, {
+          tikzOptions: tikzOptionsInput,
+          afterTree: drawInput,
+          raw: false,
+          preamble: (QTree.defaultPreamble || '') + preambleOnly,
+          beforeTree: bodyDecls || undefined
+        });
+        svgBtn.disabled = pngTransBtn.disabled = pngWhiteBtn.disabled = false;
+        return;
+      }
+    }
+
     const isRaw = !trimmed.startsWith('\\begin{tikzpicture}') &&
       (trimmed.startsWith('\\Tree') || trimmed.startsWith('\\begin{') ||
        trimmed.startsWith('\\draw') || trimmed.startsWith('\\node'));
