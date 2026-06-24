@@ -30,6 +30,10 @@
     <div class="tree-container" id="custom-tree">
       <span class="hint">Enter a tree above and click Render</span>
     </div>
+    <details id="tex-source-details" style="margin-top:8px;display:none">
+      <summary style="cursor:pointer;font-size:small;color:#666">Generated TeX code</summary>
+      <pre id="tex-source-pre" style="font-size:x-small;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;background:#f8f8f8;border:1px solid #ddd;padding:6px;margin-top:4px"></pre>
+    </details>
    </div>
   <div>
 		<h3><!--<a href="#">-->
@@ -146,15 +150,15 @@ img { border: 1px solid #bbbbbb; }
     window.MutationObserver = _PatchedMO;
   })();
 </script>
-<script async src="dist/tikzjax/tikzjax.js?v=7"></script>
-<script src="dist/qtree.js"></script>
+<script async src="dist/tikzjax/tikzjax.js?v=8"></script>
+<script src="dist/qtree.js?v=8"></script>
 <script>
   // Resolve tikzjax paths relative to this page's URL — used as fallback if
   // the async tikzjax.js tag above hasn't finished loading when Render fires.
   (function() {
     var base = new URL('./', window.location.href).href;
     window.QTree.configure({
-      tikzjaxUrl: new URL('dist/tikzjax/tikzjax.js?v=7', base).href,
+      tikzjaxUrl: new URL('dist/tikzjax/tikzjax.js?v=8', base).href,
       fontsUrl:   new URL('dist/tikzjax/fonts.css',   base).href
     });
   })();
@@ -262,6 +266,8 @@ window.renderCustomTree = async function() {
 
   container.innerHTML = '<span class="hint">Rendering… (initializing TeX engine on first use — may take 1–2 min)</span>';
   svgBtn.disabled = pngTransBtn.disabled = pngWhiteBtn.disabled = true;
+  const texSourceDetails = document.getElementById('tex-source-details');
+  const texSourcePre = document.getElementById('tex-source-pre');
 
   // Watch document.body for spinner/SVG addition anywhere — confirms TikZJax
   // picked up the script. (The SVG is now created in a hidden tempHolder on body,
@@ -297,13 +303,18 @@ window.renderCustomTree = async function() {
       if (parsed) {
         const { preambleRaw, body } = parsed;
         const { preamble: preambleOnly, beforeTree: bodyDecls } = window._splitPreamble(preambleRaw);
-        await QTree.render(container, body, {
+        const renderOpts = {
           tikzOptions: tikzOptionsInput,
           afterTree: drawInput,
           raw: false,
           preamble: (QTree.defaultPreamble || '') + preambleOnly,
           beforeTree: bodyDecls || undefined
-        });
+        };
+        // Show the assembled TeX so the user can verify what's being compiled
+        const generatedTeX = QTree.generateTikZCode(body, renderOpts);
+        if (texSourcePre) texSourcePre.textContent = generatedTeX;
+        if (texSourceDetails) texSourceDetails.style.display = '';
+        await QTree.render(container, body, renderOpts);
         svgBtn.disabled = pngTransBtn.disabled = pngWhiteBtn.disabled = false;
         return;
       }
@@ -322,13 +333,19 @@ window.renderCustomTree = async function() {
       beforeTree = bodyDecls || undefined;
     }
 
-    await QTree.render(container, treeInput, {
+    const normalOpts = {
       tikzOptions: tikzOptionsInput,
       afterTree: drawInput,
       raw: isRaw,
       preamble: renderPreamble,
       beforeTree: beforeTree
-    });
+    };
+    // Show the assembled TeX so the user can verify what's being compiled
+    const generatedTeX = QTree.generateTikZCode(treeInput, normalOpts);
+    if (texSourcePre) texSourcePre.textContent = generatedTeX;
+    if (texSourceDetails) texSourceDetails.style.display = '';
+
+    await QTree.render(container, treeInput, normalOpts);
 
     svgBtn.disabled = pngTransBtn.disabled = pngWhiteBtn.disabled = false;
   } catch (error) {
@@ -340,7 +357,9 @@ window.renderCustomTree = async function() {
       'IDB: ' + (() => { try { return typeof indexedDB !== 'undefined' ? 'ok' : 'N/A'; } catch(e) { return 'blocked'; } })(),
       'Logs: ' + (window._tjLogs.slice(-5).join(' | ') || '(none)')
     ].join(' | ');
-    container.innerHTML = `<div class="error">Error: ${error.message}<br><small style="opacity:.7">${debugInfo}</small></div>`;
+    container.innerHTML = `<div class="error">Error: ${error.message}<br><small style="opacity:.7">${debugInfo}</small><br><small style="opacity:.7">Tip: open browser DevTools (F12 → Console) for TeX error details.</small></div>`;
+    // Auto-expand the generated TeX panel so the user can inspect the source
+    if (texSourceDetails) { texSourceDetails.style.display = ''; texSourceDetails.open = true; }
   } finally {
     spinnerWatcher.disconnect();
   }

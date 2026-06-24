@@ -191,6 +191,8 @@ function createTikZScript(tikzCode, preamble = config.preamble) {
   if (preamble) {
     script.setAttribute('data-add-to-preamble', preamble);
   }
+  // Enable TeX console output so errors appear in browser DevTools → Console
+  script.setAttribute('data-show-console', 'true');
   script.textContent = tikzCode;
   return script;
 }
@@ -259,11 +261,16 @@ async function render(container, tree, options = {}) {
   return new Promise((resolve, reject) => {
     let timeoutId;
 
+    const cleanup = () => {
+      tempHolder.removeEventListener('tikzjax-load-finished', onFinished);
+      clearTimeout(timeoutId);
+      failureWatcher.disconnect();
+      if (tempHolder.parentNode) document.body.removeChild(tempHolder);
+    };
+
     // TikZJax fires 'tikzjax-load-finished' on the final SVG (bubbles:true)
     // once rendering is complete — for both cached results and fresh TeX runs.
     const onFinished = () => {
-      tempHolder.removeEventListener('tikzjax-load-finished', onFinished);
-      clearTimeout(timeoutId);
       const svgEl = tempHolder.querySelector('svg');
       if (svgEl) {
         if (!svgEl.querySelector('title')) {
@@ -273,25 +280,44 @@ async function render(container, tree, options = {}) {
         }
         svgEl.setAttribute('role', 'img');
         svgEl.setAttribute('aria-label', tree);
-        // Move the finished SVG into the visible container
         containerEl.innerHTML = '';
         containerEl.appendChild(svgEl);
         containerEl.dataset.qtreeSource = tree;
-        if (tempHolder.parentNode) document.body.removeChild(tempHolder);
+        cleanup();
         resolve(svgEl);
       } else {
-        if (tempHolder.parentNode) document.body.removeChild(tempHolder);
+        cleanup();
         reject(new Error('TikZJax finished but no SVG found'));
       }
     };
+
+    // When tikzjax fails to compile it replaces the animated loader with a
+    // broken <img> element instead of dispatching tikzjax-load-finished.
+    // Detect that immediately so we reject in under a second rather than
+    // waiting out the full 90-second timeout.
+    const failureWatcher = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType === 1 && node.nodeName === 'IMG') {
+            const logs = window._tjLogs || [];
+            const errMsg = logs.slice().reverse().find(
+              l => l.includes('Could not find') || l.includes('Error') || l.includes('error')
+            ) || 'TeX compilation failed — open browser DevTools (F12) → Console for details';
+            cleanup();
+            reject(new Error(errMsg));
+            return;
+          }
+        }
+      }
+    });
+    failureWatcher.observe(tempHolder, { childList: true, subtree: true });
 
     tempHolder.addEventListener('tikzjax-load-finished', onFinished);
 
     // Timeout after 90 seconds (TeX compilation is slow on first cold render:
     // the Worker must decompress ~70 MB of pre-built format + run WebAssembly).
     timeoutId = setTimeout(() => {
-      tempHolder.removeEventListener('tikzjax-load-finished', onFinished);
-      if (tempHolder.parentNode) document.body.removeChild(tempHolder);
+      cleanup();
       reject(new Error('TikZJax rendering timed out'));
     }, 90000);
   });
