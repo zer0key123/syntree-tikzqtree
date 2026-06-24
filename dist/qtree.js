@@ -239,29 +239,15 @@
     // Create the script element
     const script = createTikZScript(finalCode, preamble);
 
-    // Wait for the TeX engine (H) to finish initialising before touching the DOM.
-    // This is the key to winning the A.loader race:
-    //
-    //   tikzjax's I() does: await D(script)  →  H = await H  →  V(script)
-    //
-    // Two D() calls run concurrently (one from our explicit _tjProcessScripts
-    // call, one from the MO that fires when we add the script to the DOM).
-    // Both set script.loader; whichever runs second wins.  I() only calls
-    // V() after "H = await H" resolves.  If H is still pending at that point,
-    // the second D() has time to overwrite script.loader with a detached
-    // spinner before V() captures it — so g.replaceWith(SVG) is a no-op and
-    // the tikzjax-load-finished event never reaches tempHolder.
-    //
-    // By awaiting window._tjEngine here, H is already resolved when we
-    // append to the DOM and call _tjProcessScripts.  Consequently,
-    // "H = await H" in the explicit I() is a microtask-instant no-op:
-    // V() captures g = script.loader = spinner1 (the in-DOM one) before the
-    // MO's second D() can overwrite script.loader with spinner2 (detached).
-    console.log('[qtree] render: _tjEngine=', typeof window._tjEngine, '_tjPS=', typeof window._tjProcessScripts);
+    // Await the TeX engine (H) before touching the DOM.  tikzjax's I() runs
+    // D(script) → H=await H → V(script).  Two D() calls fire concurrently
+    // (explicit _tjProcessScripts + MO); both set script.loader — last writer
+    // wins.  With H still pending, the MO's second D() overwrites script.loader
+    // with a detached spinner before V() can capture it, so the SVG goes
+    // nowhere.  Pre-resolving H means "H=await H" is a microtask no-op, so
+    // V() captures the correct spinner before the MO's D() can clobber it.
     if (window._tjEngine) {
-      try { await window._tjEngine; console.log('[qtree] _tjEngine resolved'); } catch (_e) { console.log('[qtree] _tjEngine rejected', String(_e)); }
-    } else {
-      console.log('[qtree] _tjEngine not set, skipping await');
+      try { await window._tjEngine; } catch (_e) {}
     }
 
     // Place script in a hidden off-screen div attached to body.
@@ -271,14 +257,9 @@
                                'visibility:hidden;pointer-events:none';
     document.body.appendChild(tempHolder);
     tempHolder.appendChild(script);
-    console.log('[qtree] script in DOM, connected=', script.isConnected, 'childNodes=', script.childNodes.length);
 
     if (typeof window._tjProcessScripts === 'function') {
-      console.log('[qtree] calling _tjProcessScripts');
       window._tjProcessScripts([script]);
-      console.log('[qtree] _tjProcessScripts called');
-    } else {
-      console.log('[qtree] _tjProcessScripts not available');
     }
 
     // Wait for TikZJax to process
