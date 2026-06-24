@@ -180,8 +180,10 @@ const PIXEL_DRAW_PREAMBLE = String.raw`\usetikzlibrary{decorations}`;
 const PIXEL_DRAW_BEFORE_TREE = String.raw`\newlength{\pxsz}\setlength{\pxsz}{2pt}\newlength{\pixeltmpx}\newlength{\pixeltmpy}\newlength{\decsnaplx}\newlength{\decstartx}\newlength{\decstarty}\newcount\decstartpx\newcount\decstartpy\newtoks\pixelpath\newcount\deccx\newcount\deccy\newcount\decpx\newcount\decpy\newcount\cellfirst\newcount\lastcx\newcount\lastcy\newcount\bpx\newcount\bpy\newcount\bqx\newcount\bqy\newcount\bdx\newcount\bdy\newcount\bsx\newcount\bsy\newcount\ber\newcount\betwo\newcount\arrowdir\newcount\arrtipx\newcount\arrtipy
 \newcommand{\pixelpathinit}{\global\pixelpath={}}
 \newcommand{\pixelpathflush}{%
+  \pgfinterruptboundingbox
   \pgfscope\pgftransformreset\the\pixelpath\pgfusepath{fill}%
-  \endpgfscope}
+  \endpgfscope
+  \endpgfinterruptboundingbox}
 \newcommand{\addpixel}[2]{%
   \pixeltmpx=#1\pxsz\relax\pixeltmpy=#2\pxsz\relax
   \xdef\pixeltmpstr{%
