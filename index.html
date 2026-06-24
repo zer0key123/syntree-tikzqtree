@@ -71,6 +71,7 @@
 	<div style="text-align: center;">
 		<div class="actions">
       		<button class="primary" onclick="renderCustomTree()">Render</button>
+      		<button class="secondary" id="copy-link-btn" onclick="copyLink()">Copy link</button>
       		<button class="secondary" id="download-svg-btn" onclick="downloadSVG()" disabled>Download SVG</button>
       		<button class="secondary" id="png-transparent-btn" onclick="downloadPNG(false)" disabled>Download PNG</button>
       		<button class="secondary" id="png-white-btn" onclick="downloadPNG(true)" disabled>PNG (white bg)</button>
@@ -288,6 +289,32 @@ window.renderCustomTree = async function() {
     spinnerWatcher.disconnect();
   }
 };
+window.copyLink = function() {
+  const tree    = document.getElementById('tree-input').value;
+  const options = document.getElementById('tikz-options-input').value;
+  const preamble = document.getElementById('preamble-input').value;
+  const draw    = document.getElementById('draw-input').value;
+
+  const params = new URLSearchParams();
+  if (tree)     params.set('i', tree);
+  if (options)  params.set('o', options);
+  if (preamble) params.set('p', preamble);
+  if (draw)     params.set('d', draw);
+
+  const url = window.location.origin + window.location.pathname +
+              (params.toString() ? '?' + params.toString() : '');
+
+  const btn = document.getElementById('copy-link-btn');
+  navigator.clipboard.writeText(url).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  }).catch(() => {
+    // Fallback for browsers where clipboard API requires a user gesture context
+    prompt('Copy this link:', url);
+  });
+};
+
 // Only auto-render on load if there is actual input (e.g. from ?i= URL param).
 // An empty initial render starts a 30-second timeout that later overwrites
 // the container with a "timed out" error, killing any real render in progress.
