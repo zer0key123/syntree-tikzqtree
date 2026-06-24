@@ -9,7 +9,7 @@
    */
 
   // Use local tikzjax build with tikz-qtree support
-  const TIKZJAX_DEFAULT = '/syntree-tikzqtree/dist/tikzjax/tikzjax.js';
+  const TIKZJAX_DEFAULT = '/syntree-tikzqtree/dist/tikzjax/tikzjax.js?v=7';
 
   /**
    * Default TikZ preamble for qtree trees.
@@ -257,24 +257,28 @@
     // "H = await H" in the explicit I() is a microtask-instant no-op:
     // V() captures g = script.loader = spinner1 (the in-DOM one) before the
     // MO's second D() can overwrite script.loader with spinner2 (detached).
+    console.log('[qtree] render: _tjEngine=', typeof window._tjEngine, '_tjPS=', typeof window._tjProcessScripts);
     if (window._tjEngine) {
-      try { await window._tjEngine; } catch (_e) {}
+      try { await window._tjEngine; console.log('[qtree] _tjEngine resolved'); } catch (_e) { console.log('[qtree] _tjEngine rejected', String(_e)); }
+    } else {
+      console.log('[qtree] _tjEngine not set, skipping await');
     }
 
     // Place script in a hidden off-screen div attached to body.
-    // tikzjax's D() needs the script to be in the live DOM so that
-    // script.replaceWith(spinner) actually inserts the spinner into the page.
     const tempHolder = document.createElement('div');
     tempHolder.style.cssText = 'position:absolute;left:-99999px;top:-99999px;' +
                                'width:1px;height:1px;overflow:hidden;' +
                                'visibility:hidden;pointer-events:none';
     document.body.appendChild(tempHolder);
     tempHolder.appendChild(script);
+    console.log('[qtree] script in DOM, connected=', script.isConnected, 'childNodes=', script.childNodes.length);
 
-    // Explicitly invoke tikzjax's processing pipeline.  Runs synchronously
-    // (before the MO microtask fires), so the explicit I() always starts first.
     if (typeof window._tjProcessScripts === 'function') {
+      console.log('[qtree] calling _tjProcessScripts');
       window._tjProcessScripts([script]);
+      console.log('[qtree] _tjProcessScripts called');
+    } else {
+      console.log('[qtree] _tjProcessScripts not available');
     }
 
     // Wait for TikZJax to process

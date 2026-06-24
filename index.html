@@ -145,7 +145,7 @@ img { border: 1px solid #bbbbbb; }
     window.MutationObserver = _PatchedMO;
   })();
 </script>
-<script async src="dist/tikzjax/tikzjax.js"></script>
+<script async src="dist/tikzjax/tikzjax.js?v=7"></script>
 <script src="dist/qtree.js"></script>
 <script>
   // Resolve tikzjax paths relative to this page's URL — used as fallback if
@@ -153,7 +153,7 @@ img { border: 1px solid #bbbbbb; }
   (function() {
     var base = new URL('./', window.location.href).href;
     window.QTree.configure({
-      tikzjaxUrl: new URL('dist/tikzjax/tikzjax.js', base).href,
+      tikzjaxUrl: new URL('dist/tikzjax/tikzjax.js?v=7', base).href,
       fontsUrl:   new URL('dist/tikzjax/fonts.css',   base).href
     });
   })();
