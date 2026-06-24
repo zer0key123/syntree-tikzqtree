@@ -253,6 +253,14 @@ async function render(container, tree, options = {}) {
   tempHolder.appendChild(script);       // script inside holder before DOM insertion
   document.body.appendChild(tempHolder); // single mutation → MO finds script once
 
+  // Explicitly invoke tikzjax's processing pipeline.  This runs first
+  // (synchronously, before the MO microtask fires), so D() sets script._tjPrs=1
+  // and the MO's later I([script]) call is a no-op via the _tjPrs guard we
+  // patched into tikzjax.js.
+  if (typeof window._tjProcessScripts === 'function') {
+    window._tjProcessScripts([script]);
+  }
+
   // Wait for TikZJax to process
   return new Promise((resolve, reject) => {
     let timeoutId;
