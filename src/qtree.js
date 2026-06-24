@@ -234,6 +234,12 @@ async function render(container, tree, options = {}) {
   // Create the script element
   const script = createTikZScript(finalCode, preamble);
 
+  // Wait for the TeX engine (H) to finish initialising before touching the DOM.
+  // See dist/qtree.js for the full explanation of the A.loader race this fixes.
+  if (window._tjEngine) {
+    try { await window._tjEngine; } catch (_e) {}
+  }
+
   // Place script in a hidden off-screen div attached to body.
   const tempHolder = document.createElement('div');
   tempHolder.style.cssText = 'position:absolute;left:-99999px;top:-99999px;' +
@@ -242,11 +248,7 @@ async function render(container, tree, options = {}) {
   document.body.appendChild(tempHolder);
   tempHolder.appendChild(script);
 
-  // Explicitly invoke tikzjax's processing pipeline so the MO isn't the
-  // sole trigger (MO timing on cold load can be unreliable).
-  // tikzjax.js is patched so D() guards `if(!A.loader)` before creating the
-  // spinner, meaning only the first D() call wins — the MO's duplicate call
-  // is a no-op, avoiding the A.loader overwrite race.
+  // Explicitly invoke tikzjax's processing pipeline.
   if (typeof window._tjProcessScripts === 'function') {
     window._tjProcessScripts([script]);
   }

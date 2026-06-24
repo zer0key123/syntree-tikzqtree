@@ -239,6 +239,28 @@
     // Create the script element
     const script = createTikZScript(finalCode, preamble);
 
+    // Wait for the TeX engine (H) to finish initialising before touching the DOM.
+    // This is the key to winning the A.loader race:
+    //
+    //   tikzjax's I() does: await D(script)  →  H = await H  →  V(script)
+    //
+    // Two D() calls run concurrently (one from our explicit _tjProcessScripts
+    // call, one from the MO that fires when we add the script to the DOM).
+    // Both set script.loader; whichever runs second wins.  I() only calls
+    // V() after "H = await H" resolves.  If H is still pending at that point,
+    // the second D() has time to overwrite script.loader with a detached
+    // spinner before V() captures it — so g.replaceWith(SVG) is a no-op and
+    // the tikzjax-load-finished event never reaches tempHolder.
+    //
+    // By awaiting window._tjEngine here, H is already resolved when we
+    // append to the DOM and call _tjProcessScripts.  Consequently,
+    // "H = await H" in the explicit I() is a microtask-instant no-op:
+    // V() captures g = script.loader = spinner1 (the in-DOM one) before the
+    // MO's second D() can overwrite script.loader with spinner2 (detached).
+    if (window._tjEngine) {
+      try { await window._tjEngine; } catch (_e) {}
+    }
+
     // Place script in a hidden off-screen div attached to body.
     // tikzjax's D() needs the script to be in the live DOM so that
     // script.replaceWith(spinner) actually inserts the spinner into the page.
@@ -249,11 +271,8 @@
     document.body.appendChild(tempHolder);
     tempHolder.appendChild(script);
 
-    // Explicitly invoke tikzjax's processing pipeline so the MO isn't the
-    // sole trigger (MO timing on cold load can be unreliable).
-    // tikzjax.js is patched so D() guards `if(!A.loader)` before creating the
-    // spinner, meaning only the first D() call wins — the MO's duplicate call
-    // is a no-op, avoiding the A.loader overwrite race.
+    // Explicitly invoke tikzjax's processing pipeline.  Runs synchronously
+    // (before the MO microtask fires), so the explicit I() always starts first.
     if (typeof window._tjProcessScripts === 'function') {
       window._tjProcessScripts([script]);
     }
